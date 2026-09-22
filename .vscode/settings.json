@@ -1,0 +1,12 @@
+{
+    "[typescript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "json.schemaDownload.enable": true,
+    "prettier.trailingComma": "none",
+    "prettier.semi": false,
+    "prettier.quoteProps": "preserve",
+    "prettier.printWidth": 250,
+    "prettier.arrowParens": "avoid",
+    "prettier.tabWidth": 4
+}

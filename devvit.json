@@ -1,0 +1,51 @@
+{
+    "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
+    "name": "wysi-bot",
+    "server": {
+        "dir": "dist/server",
+        "entry": "index.cjs"
+    },
+    "triggers": {
+        "onAppInstall": "/internal/triggers/on-app-install",
+        "onPostCreate": "/internal/triggers/on-post-create",
+        "onCommentCreate": "/internal/triggers/on-comment-create"
+    },
+    "scripts": {
+        "build": "vite build",
+        "dev": "vite build --watch"
+    },
+    "permissions": {
+        "reddit": {
+            "enable": true,
+            "asUser": ["SUBMIT_POST", "SUBMIT_COMMENT"],
+            "scope": "moderator"
+        },
+        "http": {
+            "enable": true,
+            "domains": ["osu.ppy.sh", "apis.issou.best"]
+        },
+        "redis": true
+    },
+    "settings": {
+        "global": {
+            "osuClientId": {
+                "type": "string",
+                "label": "osu! API Client ID",
+                "isSecret": true
+            },
+            "osuClientSecret": {
+                "type": "string",
+                "label": "osu! API Client Secret",
+                "isSecret": true
+            },
+            "osuToolsApiKey": {
+                "type": "string",
+                "label": "osu-tools API Key (on apis.issou.best)",
+                "isSecret": true
+            }
+        }
+    },
+    "dev": {
+        "subreddit": "wysi_bot_dev"
+    }
+}
