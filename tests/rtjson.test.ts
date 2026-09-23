@@ -60,6 +60,9 @@ function makeScore(overrides: Partial<Score> = {}): Score {
         is_perfect_combo: false,
         pp: 800,
         ended_at: "2024-01-01T00:00:00Z",
+        miss_count: 0,
+        total_score: 1000000,
+        is_stable: false,
         beatmap: undefined,
         beatmapset: undefined,
         ...overrides
@@ -112,6 +115,7 @@ function makeCommentData(overrides: Partial<CommentData> = {}): CommentData {
         player: null,
         mode: "osu",
         mods: [],
+        nomodMods: [],
         acc: null,
         guestMapper: null,
         topScore: null,
@@ -321,6 +325,14 @@ describe("buildComment", () => {
             expect(text).toContain("5.5") // SR
             expect(text).toContain("180") // BPM
             expect(text).toContain("04:00") // length
+        })
+
+        it("labels the first row with its mods instead of NoMod when set (stable nomod plays: +CL)", () => {
+            const data = makeCommentData({ beatmap: makeBeatmap(), nomodMods: [makeMod("CL")] })
+            const doc = getDoc(buildComment(data)!)
+            const text = extractText(doc)
+            expect(text).toContain("+CL")
+            expect(text).not.toContain("NoMod")
         })
 
         it("shows modded row when difficulty mods present", () => {

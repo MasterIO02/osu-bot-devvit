@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest"
-import { getMods } from "../src/core/scorepost/helpers/get_mods"
+import { getMods, sameMods } from "../src/core/scorepost/helpers/get_mods"
+import type { Mod } from "../src/core/requests/osu_api"
 
 describe("getMods", () => {
     describe("standard format (+MODS)", () => {
@@ -307,5 +308,39 @@ describe("getMods", () => {
         it("parses Saiyku DA with circle size score", () => {
             expect(getMods("Saiyku | wuk - Sidetracked Day [Maaadbot's Sidetracked Week] (sytho, 12.19*) +DA(CS7.5) 99.11% 307/633x 2miss")).toEqual([{ acronym: "DA", settings: { circle_size: "7.5" } }])
         })
+    })
+})
+
+describe("sameMods", () => {
+    const mods = (...acronyms: string[]): Mod[] => acronyms.map(acronym => ({ acronym }))
+
+    it("matches identical mod sets", () => {
+        expect(sameMods(mods("HD", "DT"), mods("HD", "DT"))).toBe(true)
+    })
+
+    it("is order-insensitive", () => {
+        expect(sameMods(mods("DT", "HD", "HR"), mods("HD", "HR", "DT"))).toBe(true)
+    })
+
+    it("is settings-insensitive", () => {
+        expect(sameMods(mods("HD", "DT"), [{ acronym: "HD" }, { acronym: "DT", settings: { speed_change: "1.1" } }])).toBe(true)
+    })
+
+    it("matches two empty mod sets", () => {
+        expect(sameMods([], [])).toBe(true)
+    })
+
+    it("ignores CL on both sides (titles can carry it, API mods never do)", () => {
+        expect(sameMods(mods("HD", "DT", "CL"), mods("HD", "DT"))).toBe(true)
+        expect(sameMods(mods("CL"), [])).toBe(true)
+    })
+
+    it("rejects different mod sets", () => {
+        expect(sameMods(mods("HD"), mods("HD", "DT"))).toBe(false)
+        expect(sameMods(mods("HD", "DT"), mods("HD", "HR"))).toBe(false)
+    })
+
+    it("rejects a score against an empty title", () => {
+        expect(sameMods(mods("HD"), [])).toBe(false)
     })
 })

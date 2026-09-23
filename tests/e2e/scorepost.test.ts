@@ -5,7 +5,7 @@ import * as osuApi from "../../src/core/requests/osu_api"
 import * as osuTools from "../../src/core/requests/osu_tools"
 import * as beatmapSearch from "../../src/core/scorepost/beatmap_search"
 import { reddit } from "@devvit/web/server"
-import type { BeatmapExtended, User, Gamemode } from "../../src/core/requests/osu_api"
+import type { BeatmapExtended, Score, User, Gamemode } from "../../src/core/requests/osu_api"
 
 // Mock all external dependencies
 vi.mock("../../src/core/requests/osu_api")
@@ -67,12 +67,32 @@ function makeUser(overrides: Partial<User> = {}): User {
     } as User
 }
 
+function makeScore(overrides: Partial<Score> = {}): Score {
+    return {
+        user_id: 1,
+        username: "TestPlayer",
+        accuracy: 0.985,
+        mods: [],
+        max_combo: 500,
+        is_perfect_combo: false,
+        pp: 400,
+        ended_at: new Date().toISOString(),
+        miss_count: 0,
+        total_score: 1000000,
+        is_stable: false,
+        beatmap: undefined,
+        beatmapset: undefined,
+        ...overrides
+    }
+}
+
 function makeCommentData(overrides: Partial<CommentData> = {}): CommentData {
     return {
         beatmap: null,
         player: null,
         mode: "osu",
         mods: [],
+        nomodMods: [],
         acc: null,
         guestMapper: null,
         topScore: null,
@@ -208,7 +228,7 @@ describe("E2E: Scorepost Processing", () => {
             const post = makePost("mrekk | xi - Blue Zenith [Hard] 99.5%")
 
             vi.mocked(osuApi.lookupUser).mockResolvedValue({ error: false, data: makeUser({ username: "mrekk" }) })
-            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({ beatmap: makeBeatmap(), topPlay: null })
+            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({ beatmap: makeBeatmap(), matchedScore: null, topPlay: null })
             vi.mocked(osuApi.getBeatmapScores).mockResolvedValue({ error: false, data: { scores: [] } })
             vi.mocked(osuApi.getUserBestScores).mockResolvedValue({ error: false, data: [] })
 
@@ -222,7 +242,7 @@ describe("E2E: Scorepost Processing", () => {
             const post = makePost("Player | Artist - Song [Insane] +HDDT 98.5% FC")
 
             vi.mocked(osuApi.lookupUser).mockResolvedValue({ error: false, data: makeUser() })
-            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({ beatmap: makeBeatmap(), topPlay: null })
+            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({ beatmap: makeBeatmap(), matchedScore: null, topPlay: null })
             vi.mocked(osuApi.getBeatmapScores).mockResolvedValue({ error: false, data: { scores: [] } })
             vi.mocked(osuApi.getUserBestScores).mockResolvedValue({ error: false, data: [] })
             vi.mocked(osuTools.getPerformance).mockResolvedValue({
@@ -270,7 +290,7 @@ describe("E2E: Scorepost Processing", () => {
             const post = makePost("Player | Artist - Song [Hard] 99%")
 
             vi.mocked(osuApi.lookupUser).mockResolvedValue({ error: false, data: makeUser() })
-            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({ beatmap: makeBeatmap({ max_combo: undefined }), topPlay: null })
+            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({ beatmap: makeBeatmap({ max_combo: undefined }), matchedScore: null, topPlay: null })
             vi.mocked(osuApi.getBeatmapScores).mockResolvedValue({ error: false, data: { scores: [] } })
             vi.mocked(osuApi.getUserBestScores).mockResolvedValue({ error: false, data: [] })
 
@@ -319,7 +339,7 @@ describe("E2E: Scorepost Processing", () => {
             const post = makePost("Player | Artist - Song [Hard] 99%")
 
             vi.mocked(osuApi.lookupUser).mockResolvedValue({ error: false, data: makeUser({ username: "mrekk" }) })
-            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({ beatmap: null, topPlay: null })
+            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({ beatmap: null, matchedScore: null, topPlay: null })
 
             await processScorepost(post)
 
@@ -347,7 +367,7 @@ describe("E2E: Scorepost Processing", () => {
                 const post = makePost(`Player | Artist - Song [Hard] ${titleSuffix} 99%`)
 
                 vi.mocked(osuApi.lookupUser).mockResolvedValue({ error: false, data: makeUser() })
-                vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({ beatmap: makeBeatmap(), topPlay: null })
+                vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({ beatmap: makeBeatmap(), matchedScore: null, topPlay: null })
                 vi.mocked(osuApi.getBeatmapScores).mockResolvedValue({ error: false, data: { scores: [] } })
                 vi.mocked(osuApi.getUserBestScores).mockResolvedValue({ error: false, data: [] })
 
@@ -471,7 +491,7 @@ describe("E2E: Scorepost Processing", () => {
     describe("Accuracy Parsing", () => {
         const setupHappyMocks = () => {
             vi.mocked(osuApi.lookupUser).mockResolvedValue({ error: false, data: makeUser() })
-            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({ beatmap: makeBeatmap(), topPlay: null })
+            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({ beatmap: makeBeatmap(), matchedScore: null, topPlay: null })
             vi.mocked(osuApi.getBeatmapScores).mockResolvedValue({ error: false, data: { scores: [] } })
             vi.mocked(osuApi.getUserBestScores).mockResolvedValue({ error: false, data: [] })
         }
@@ -511,12 +531,166 @@ describe("E2E: Scorepost Processing", () => {
         })
     })
 
+    describe("Stable Score PP", () => {
+        const setupHappyMocks = () => {
+            vi.mocked(osuApi.lookupUser).mockResolvedValue({ error: false, data: makeUser() })
+            vi.mocked(osuApi.getBeatmapScores).mockResolvedValue({ error: false, data: { scores: [] } })
+            vi.mocked(osuApi.getUserBestScores).mockResolvedValue({ error: false, data: [] })
+        }
+
+        it("computes and labels the play's row with CL, and passes the legacy total score only on the play's own cell", async () => {
+            const post = makePost("Player | Artist - Song [Hard] +HDDT 98.5% FC")
+            setupHappyMocks()
+            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({
+                beatmap: makeBeatmap(),
+                matchedScore: makeScore({ mods: [{ acronym: "HD" }, { acronym: "DT" }], is_stable: true, total_score: 11595243, miss_count: 3 }),
+                topPlay: null
+            })
+
+            await processScorepost(post)
+
+            const calls = vi.mocked(osuTools.getPerformance).mock.calls
+            // 5 nomod calls + 5 modded calls, both computed with CL (stable algorithms) for stable plays
+            expect(calls).toHaveLength(10)
+            const nomodCalls = calls.filter(c => c[1].length === 1)
+            const moddedCalls = calls.filter(c => c[1].length === 3)
+            expect(nomodCalls).toHaveLength(5)
+            expect(moddedCalls).toHaveLength(5)
+            for (const call of calls) expect(call[1].map(m => m.acronym)).toContain("CL")
+            // the play's combo and stable total score only go to its own cell: the play's row at the scorepost's accuracy
+            const scoreCells = calls.filter(c => c[4] !== undefined)
+            expect(scoreCells).toHaveLength(1)
+            expect(scoreCells[0]![1].map(m => m.acronym).sort()).toEqual(["CL", "DT", "HD"])
+            expect(scoreCells[0]![3]).toBe(98.5)
+            expect(scoreCells[0]![4]).toEqual({ combo: 500, misses: 3, legacyTotalScore: 11595243 })
+            // both row labels show the CL mod
+            const text = extractText(JSON.parse((vi.mocked(reddit.submitComment).mock.calls[0]![0] as any).richtext.build()))
+            expect(text).toContain("+HDDTCL")
+            expect(text).toContain("+CL")
+            expect(text).not.toContain("NoMod")
+        })
+
+        it("ignores CL in the matched play's mods when checking it's the posted play", async () => {
+            const post = makePost("Player | Artist - Song [Hard] +HDDT 98.5% FC")
+            setupHappyMocks()
+            // sameMods ignores CL on both sides, so a CL in the matched play's mods doesn't break the match
+            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({
+                beatmap: makeBeatmap(),
+                matchedScore: makeScore({ mods: [{ acronym: "HD" }, { acronym: "DT" }, { acronym: "CL" }], is_stable: true, total_score: 11595243 }),
+                topPlay: null
+            })
+
+            await processScorepost(post)
+
+            const calls = vi.mocked(osuTools.getPerformance).mock.calls
+            const scoreCells = calls.filter(c => c[4] !== undefined)
+            expect(scoreCells).toHaveLength(1)
+            expect(scoreCells[0]![3]).toBe(98.5)
+            expect(scoreCells[0]![4]).toEqual({ combo: 500, misses: 0, legacyTotalScore: 11595243 })
+        })
+
+        it("doesn't inject CL or legacy score for lazer plays (solo_score)", async () => {
+            const post = makePost("Player | Artist - Song [Hard] +HDDT 98.5% FC")
+            setupHappyMocks()
+            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({
+                beatmap: makeBeatmap(),
+                matchedScore: makeScore({ mods: [{ acronym: "HD" }, { acronym: "DT" }] }),
+                topPlay: null
+            })
+
+            await processScorepost(post)
+
+            const calls = vi.mocked(osuTools.getPerformance).mock.calls
+            // no CL and no legacy score for lazer plays, but the play's own cell still carries its actual combo
+            for (const call of calls) {
+                expect(call[1].map(m => m.acronym)).not.toContain("CL")
+            }
+            const scoreCells = calls.filter(c => c[4] !== undefined)
+            expect(scoreCells).toHaveLength(1)
+            expect(scoreCells[0]![4]).toEqual({ combo: 500, misses: 0 })
+        })
+
+        it("passes the title's CL through, but no legacy score, for lazer plays (solo_score)", async () => {
+            const post = makePost("Player | Artist - Song [Hard] +HDDTCL 98.5% FC")
+            setupHappyMocks()
+            // lazer score: the API's mods never carry CL (no stable bitset bit), so the match relies on sameMods ignoring it
+            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({
+                beatmap: makeBeatmap(),
+                matchedScore: makeScore({ mods: [{ acronym: "HD" }, { acronym: "DT" }] }),
+                topPlay: null
+            })
+
+            await processScorepost(post)
+
+            const calls = vi.mocked(osuTools.getPerformance).mock.calls
+            // the modded row is computed with the title's CL (the play really used classic scoring), the nomod row without it
+            const moddedCalls = calls.filter(c => c[1].length === 3)
+            const nomodCalls = calls.filter(c => c[1].length === 0)
+            expect(moddedCalls).toHaveLength(5)
+            expect(nomodCalls).toHaveLength(5)
+            for (const call of moddedCalls) expect(call[1].map(m => m.acronym).sort()).toEqual(["CL", "DT", "HD"])
+            // the play's own cell carries its actual combo and misses, but no legacy score
+            const scoreCells = calls.filter(c => c[4] !== undefined)
+            expect(scoreCells).toHaveLength(1)
+            expect(scoreCells[0]![4]).toEqual({ combo: 500, misses: 0 })
+            // the modded row label keeps the title's CL, the nomod row stays NoMod
+            const text = extractText(JSON.parse((vi.mocked(reddit.submitComment).mock.calls[0]![0] as any).richtext.build()))
+            expect(text).toContain("+HDDTCL")
+            expect(text).toContain("NoMod")
+        })
+
+        it("doesn't pass legacy data when the matched play has different mods than the title", async () => {
+            const post = makePost("Player | Artist - Song [Hard] +HDDT 98.5% FC")
+            setupHappyMocks()
+            // the matched play is HD while the title says HDDT: it's not the posted play, so no stable-score handling
+            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({
+                beatmap: makeBeatmap(),
+                matchedScore: makeScore({ mods: [{ acronym: "HD" }], is_stable: true, total_score: 11595243 }),
+                topPlay: null
+            })
+
+            await processScorepost(post)
+
+            const calls = vi.mocked(osuTools.getPerformance).mock.calls
+            for (const call of calls) {
+                expect(call[1].map(m => m.acronym)).not.toContain("CL")
+                expect(call[4]).toBeUndefined()
+            }
+        })
+
+        it("labels the NoMod row +CL and computes it with CL when the stable play is nomod", async () => {
+            const post = makePost("Player | Artist - Song [Hard] 98.5% FC")
+            setupHappyMocks()
+            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({
+                beatmap: makeBeatmap(),
+                matchedScore: makeScore({ is_stable: true, total_score: 11595243 }),
+                topPlay: null
+            })
+
+            await processScorepost(post)
+
+            const calls = vi.mocked(osuTools.getPerformance).mock.calls
+            // no mods in the title: the play's row IS the nomod row, computed with CL (5 calls)
+            expect(calls).toHaveLength(5)
+            for (const call of calls) expect(call[1]).toEqual([{ acronym: "CL" }])
+            // the play's combo, misses and stable total score only go to its own cell
+            const scoreCells = calls.filter(c => c[4] !== undefined)
+            expect(scoreCells).toHaveLength(1)
+            expect(scoreCells[0]![3]).toBe(98.5)
+            expect(scoreCells[0]![4]).toEqual({ combo: 500, misses: 0, legacyTotalScore: 11595243 })
+            // the row label shows the CL mod instead of "NoMod"
+            const text = extractText(JSON.parse((vi.mocked(reddit.submitComment).mock.calls[0]![0] as any).richtext.build()))
+            expect(text).toContain("+CL")
+            expect(text).not.toContain("NoMod")
+        })
+    })
+
     describe("Real-World Examples", () => {
         it("processes mrekk HDDT scorepost", async () => {
             const post = makePost("mrekk | xi - Blue Zenith [FOUR DIMENSIONS] +HDDT 98.56% 1423x/1634x 1xMiss")
 
             vi.mocked(osuApi.lookupUser).mockResolvedValue({ error: false, data: makeUser({ username: "mrekk" }) })
-            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({ beatmap: makeBeatmap(), topPlay: null })
+            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({ beatmap: makeBeatmap(), matchedScore: null, topPlay: null })
             vi.mocked(osuApi.getBeatmapScores).mockResolvedValue({ error: false, data: { scores: [] } })
             vi.mocked(osuApi.getUserBestScores).mockResolvedValue({ error: false, data: [] })
 
@@ -529,7 +703,7 @@ describe("E2E: Scorepost Processing", () => {
             const post = makePost("WhiteCat | Chino(CV.Minase Inori) - Shinsaku no Shiawase wa Kochira! [Happy~!] +HDHR 99.82% FC")
 
             vi.mocked(osuApi.lookupUser).mockResolvedValue({ error: false, data: makeUser({ username: "WhiteCat" }) })
-            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({ beatmap: makeBeatmap(), topPlay: null })
+            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({ beatmap: makeBeatmap(), matchedScore: null, topPlay: null })
             vi.mocked(osuApi.getBeatmapScores).mockResolvedValue({ error: false, data: { scores: [] } })
             vi.mocked(osuApi.getUserBestScores).mockResolvedValue({ error: false, data: [] })
 
@@ -542,7 +716,7 @@ describe("E2E: Scorepost Processing", () => {
     describe("Duplicate Comment Guard", () => {
         const setupHappyMocks = () => {
             vi.mocked(osuApi.lookupUser).mockResolvedValue({ error: false, data: makeUser() })
-            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({ beatmap: makeBeatmap(), topPlay: null })
+            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({ beatmap: makeBeatmap(), matchedScore: null, topPlay: null })
             vi.mocked(osuApi.getBeatmapScores).mockResolvedValue({ error: false, data: { scores: [] } })
             vi.mocked(osuApi.getUserBestScores).mockResolvedValue({ error: false, data: [] })
         }

@@ -167,3 +167,23 @@ function parseModSettings(acronym: string, raw: string): Record<string, string> 
 
     return settings
 }
+
+/**
+ * @description compare a score's mods with the title-parsed mods by acronym only (settings-insensitive)
+ * @returns true when both mod sets contain the same acronyms
+ *
+ * CL is ignored on both sides: lazer players can select it so it can appear in scorepost titles,
+ * but the API's score mods never have it.
+ * used to check whether the matched play plausibly IS the posted play.
+ */
+export function sameMods(scoreMods: Mod[], titleMods: Mod[]): boolean {
+    const score = scoreMods
+        .map(m => m.acronym)
+        .filter(a => a !== "CL")
+        .sort()
+    const title = titleMods
+        .map(m => m.acronym)
+        .filter(a => a !== "CL")
+        .sort()
+    return score.length === title.length && score.every((a, i) => a === title[i])
+}

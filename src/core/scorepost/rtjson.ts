@@ -12,7 +12,10 @@ export interface CommentData {
     beatmap: BeatmapExtended | null
     player: User | null
     mode: Gamemode
+    /** mods the modded row is computed with: the scorepost's mods, plus CL for stable plays */
     mods: Mod[]
+    /** mods the NoMod row is computed with: empty for the plain "NoMod" label, CL for stable nomod plays (labeled "+CL") */
+    nomodMods: Mod[]
     acc: number | null
     guestMapper: BeatmapOwner | null
     topScore: Score | null
@@ -38,7 +41,7 @@ export function buildComment(data: CommentData): RichTextBuilder | null {
     if (data.beatmap) {
         buildMapHeader(builder, data.beatmap, data.mode, data.guestMapper)
         buildSubheader(builder, data.beatmap, data.topScore, data.maxCombo)
-        buildDifficultyTable(builder, data.beatmap, data.mods, data.moddedDifficulty, data.ppAccuracies, data.nomodPp, data.moddedPp)
+        buildDifficultyTable(builder, data.beatmap, data.nomodMods, data.mods, data.moddedDifficulty, data.ppAccuracies, data.nomodPp, data.moddedPp)
         hasContent = true
     }
 
@@ -174,7 +177,7 @@ function formatPpCell(ppValues: (number | null)[]): string {
 }
 
 /** add a difficulty stats table (mods as rows, attributes + pp as columns) */
-function buildDifficultyTable(b: RichTextBuilder, beatmap: BeatmapExtended, mods: Mod[], moddedDifficulty: PerformanceResponse | null, ppAccuracies: number[], nomodPp: (number | null)[], moddedPp: (number | null)[]) {
+function buildDifficultyTable(b: RichTextBuilder, beatmap: BeatmapExtended, nomodMods: Mod[], mods: Mod[], moddedDifficulty: PerformanceResponse | null, ppAccuracies: number[], nomodPp: (number | null)[], moddedPp: (number | null)[]) {
     const hasPp = ppAccuracies.length > 0 && nomodPp.some(pp => pp !== null)
 
     b.table(t => {
@@ -184,9 +187,9 @@ function buildDifficultyTable(b: RichTextBuilder, beatmap: BeatmapExtended, mods
             t.headerCell({ columnAlignment: "center" }, c => c.text({ text: h }))
         }
 
-        // NoMod row
+        // NoMod row (labeled with "+CL" when score was done on stable)
         t.row(r => {
-            r.cell(c => c.text({ text: "NoMod" }))
+            r.cell(c => c.text({ text: nomodMods.length > 0 ? combineMods(nomodMods) : "NoMod" }))
             r.cell(c => c.text({ text: roundTo(beatmap.cs, 1) }))
             r.cell(c => c.text({ text: roundTo(beatmap.ar, 1) }))
             r.cell(c => c.text({ text: roundTo(beatmap.accuracy, 1) }))

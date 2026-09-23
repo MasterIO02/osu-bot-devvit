@@ -41,6 +41,9 @@ function makeScore(overrides: Partial<Score> = {}): Score {
         is_perfect_combo: false,
         pp: 100,
         ended_at: new Date().toISOString(),
+        miss_count: 0,
+        total_score: 1000000,
+        is_stable: false,
         beatmap: embeddedBeatmap(123456, "Hard"),
         beatmapset: { artist: "Artist", creator: "Mapper", title: "Title", ranked_date: null },
         ...overrides
@@ -66,6 +69,8 @@ describe("searchBeatmap", () => {
         expect(result.beatmap?.id).toBe(123456)
         // the top play is the first best score, from the same request
         expect(result.topPlay?.beatmap?.id).toBe(123456)
+        // the matched score is the play the beatmap was found through
+        expect(result.matchedScore?.beatmap?.id).toBe(123456)
         // found in best scores, no need to look at recent plays
         expect(osuApi.getUserRecentScores).not.toHaveBeenCalled()
     })
@@ -156,6 +161,8 @@ describe("searchBeatmap", () => {
 
         expect(osuApi.getUserRecentScores).toHaveBeenCalledWith(1, "osu", 50)
         expect(result.beatmap?.id).toBe(123456)
+        // the matched score is the one from the recent scores fallback
+        expect(result.matchedScore?.beatmap?.id).toBe(123456)
     })
 
     it("falls back to recent scores when the best scores request errors", async () => {
@@ -195,6 +202,7 @@ describe("searchBeatmap", () => {
         const result = await searchBeatmap(1, MATCHING_MAP, "osu")
 
         expect(result.beatmap).toBeNull()
+        expect(result.matchedScore).toBeNull()
     })
 
     it("returns null when both requests error", async () => {

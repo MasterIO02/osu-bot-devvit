@@ -29,6 +29,8 @@ The title parser handles full mod expressions:
 
 Modded difficulty attributes (CS, AR, OD, HP, SR, BPM, Length) and PP at every accuracy are computed by the osu-tools API, so custom rates and difficulty adjust settings are reflected in the table. NoMod PP always comes from the same endpoint; the #1 score's and top play's pp come from the osu! API's `Score.pp`.
 
+Plays done on stable are calculated with the classic mod + legacy total score, so their PP matches the osu! website. Those plays' rows are labeled with the CL mod (`+CL` instead of `NoMod`).
+
 ## Capabilities vs. the old Python bot
 
 This new osu-bot is at parity with the old Python bot (with a few caveats).

@@ -129,6 +129,10 @@ const RawScoreSchema = z.object({
     is_perfect_combo: z.boolean().optional(),
     pp: z.number().nullish(),
     ended_at: z.string().optional(),
+    statistics: z.object({ count_miss: z.number().optional() }).optional(),
+    // the total score: the stable (score v1) total for stable scores, or the lazer total (1m max for nomod) for lazer scores
+    score: z.number().optional(),
+    type: z.string().optional(),
     beatmap: EmbeddedBeatmapSchema.optional(),
     beatmapset: BeatmapsetSchema.optional(),
     user: z.object({ username: z.string() }).optional()
@@ -145,6 +149,10 @@ function normalizeScore(raw: z.infer<typeof RawScoreSchema>): Score {
         is_perfect_combo: raw.is_perfect_combo ?? false,
         pp: raw.pp ?? undefined,
         ended_at: raw.ended_at ?? "",
+        miss_count: raw.statistics?.count_miss ?? null,
+        total_score: raw.score ?? null,
+        // "solo_score" score types are lazer, "score_best_osu" or "score_osu" are stable
+        is_stable: raw.type?.startsWith("score_") ?? false,
         beatmap: raw.beatmap ?? undefined,
         beatmapset: raw.beatmapset ?? undefined
     }
@@ -186,6 +194,10 @@ export interface Score {
     is_perfect_combo: boolean
     pp: number | undefined
     ended_at: string
+    /** number of misses, we need it for accurate stable (= CL mod for osu-tools) pp calculation */
+    miss_count: number | null
+    total_score: number | null
+    is_stable: boolean
     beatmap: EmbeddedBeatmap | undefined
     beatmapset: Beatmapset | undefined
 }

@@ -10,8 +10,16 @@ function matchesBeatmap(apiStr: string, titleStr: string): boolean {
 export interface SearchResult {
     /** the scorepost's beatmap, if it was identified in the player's plays */
     beatmap: BeatmapExtended | null
+    /** the play the beatmap was identified from: plausibly the posted play itself */
+    matchedScore: Score | null
     /** the player's highest-pp score */
     topPlay: Score | null
+}
+
+/** a beatmap identified from one of the player's scores, with the score it was found through */
+interface BeatmapMatch {
+    beatmap: BeatmapExtended
+    score: Score
 }
 
 /**
@@ -27,8 +35,8 @@ export async function searchBeatmap(userId: number, beatmapStr: string, mode: Ga
     // best scores are sorted by pp, so the first one is the player's top play
     const topPlay = !bestScores.error && bestScores.data.length > 0 ? bestScores.data[0]! : null
 
-    const beatmap = (await searchBest(bestScores, beatmapStr)) ?? (await searchRecent(userId, beatmapStr, mode))
-    return { beatmap, topPlay }
+    const match = (await searchBest(bestScores, beatmapStr)) ?? (await searchRecent(userId, beatmapStr, mode))
+    return { beatmap: match?.beatmap ?? null, matchedScore: match?.score ?? null, topPlay }
 }
 
 /** build a beatmap display string from score-level beatmap + beatmapset data */
@@ -37,7 +45,7 @@ function scoreMapStr(beatmap: { version: string }, beatmapset: { artist: string;
 }
 
 /** search the player's top 100 scores from the last week */
-async function searchBest(bestScores: { error: true } | { error: false; data: Score[] }, beatmapStr: string): Promise<BeatmapExtended | null> {
+async function searchBest(bestScores: { error: true } | { error: false; data: Score[] }, beatmapStr: string): Promise<BeatmapMatch | null> {
     if (bestScores.error) return null
 
     const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
@@ -51,13 +59,13 @@ async function searchBest(bestScores: { error: true } | { error: false; data: Sc
         if (!matchesBeatmap(scoreMapStr(score.beatmap, score.beatmapset), beatmapStr)) continue
 
         const bmap = await getBeatmap(score.beatmap.id)
-        if (!bmap.error) return bmap.data
+        if (!bmap.error) return { beatmap: bmap.data, score }
     }
     return null
 }
 
 /** search the player's 50 most recent plays */
-async function searchRecent(userId: number, beatmapStr: string, mode: Gamemode): Promise<BeatmapExtended | null> {
+async function searchRecent(userId: number, beatmapStr: string, mode: Gamemode): Promise<BeatmapMatch | null> {
     const recentScores = await getUserRecentScores(userId, mode, 50)
     if (recentScores.error) return null
 
@@ -71,7 +79,7 @@ async function searchRecent(userId: number, beatmapStr: string, mode: Gamemode):
         if (!matchesBeatmap(scoreMapStr(score.beatmap, score.beatmapset), beatmapStr)) continue
 
         const bmap = await getBeatmap(score.beatmap.id)
-        if (!bmap.error) return bmap.data
+        if (!bmap.error) return { beatmap: bmap.data, score }
     }
     return null
 }

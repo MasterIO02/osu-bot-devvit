@@ -1,7 +1,7 @@
 import type { PostV2 } from "@devvit/web/shared"
 import { reddit, type Comment } from "@devvit/web/server"
 import { playerRegex, beatmapRegex, accRegex, tailRegex } from "./consts"
-import { getMods } from "./helpers/get_mods"
+import { getMods, sameMods } from "./helpers/get_mods"
 import { matchGamemode } from "./helpers/match_gamemode"
 import { lookupUser, getBeatmapScores, type Mod, type Score, type BeatmapOwner } from "../requests/osu_api"
 import { getPerformance } from "../requests/osu_tools"
@@ -57,7 +57,8 @@ export async function processScorepost(post: PostV2) {
 
     // search for the beatmap via player's plays
     // when the beatmap isn't found (score too old to be in the player's recent/best lists) we will fall back to a player-only comment
-    const { beatmap, topPlay } = await searchBeatmap(player.id, beatmapStr, gamemode)
+    // the matched score is the play the beatmap was found through: plausibly the posted play itself
+    const { beatmap, topPlay, matchedScore } = await searchBeatmap(player.id, beatmapStr, gamemode)
     if (!beatmap) console.log(`Beatmap "${beatmapStr}" not found for player "${playerName}", building a player-only comment`)
 
     // get map leaderboard and max combo
@@ -76,6 +77,14 @@ export async function processScorepost(post: PostV2) {
         guestMapper = beatmap.owners?.find(o => o.username !== setCreator) ?? null
     }
 
+    // the matched play, when it plausibly IS the posted play (same mods as parsed from the title)
+    const postedPlay = matchedScore !== null && sameMods(matchedScore.mods, mods) ? matchedScore : null
+
+    // when the play was done on stable, we want to add +CL to the NoMod row (yeah it's a bit weird to have nomod mods but if we want accurate calc for potential PP on the same client we need to do that)
+    // and also add the CL mod for the row with the score mods
+    const playRowMods: Mod[] = postedPlay !== null && postedPlay.is_stable ? [...mods, { acronym: "CL" }] : mods
+    const nomodRowMods: Mod[] = postedPlay !== null && postedPlay.is_stable ? [{ acronym: "CL" }] : []
+
     // compute PP at multiple accuracies (95, 98, 99, 100 + the scorepost's acc if present),
     // for the difficulty table that only exists when the beatmap was found
     let ppAccuracies: number[] = []
@@ -87,8 +96,14 @@ export async function processScorepost(post: PostV2) {
         if (acc !== null) accuracySet.add(acc)
         ppAccuracies = [...accuracySet].sort((a, b) => a - b)
 
+        // determine if the accuracy we pass is supposed to be the one of the actual score. if yes, that means we should pass the combo + misses + legacy score (for stable) so we get the accurate pp
+        const playOpts = (isPlayRow: boolean, a: number) => {
+            if (postedPlay === null || !isPlayRow || a !== acc) return undefined
+            return postedPlay.is_stable ? { combo: postedPlay.max_combo, misses: postedPlay.miss_count ?? undefined, legacyTotalScore: postedPlay.total_score ?? undefined } : { combo: postedPlay.max_combo, misses: postedPlay.miss_count ?? undefined }
+        }
+
         // fetch NoMod PP at each accuracy (always needed for the PP row)
-        const nomodResults = await Promise.all(ppAccuracies.map(a => getPerformance(beatmap.id, [], gamemode, a)))
+        const nomodResults = await Promise.all(ppAccuracies.map(a => getPerformance(beatmap.id, nomodRowMods, gamemode, a, playOpts(mods.length === 0, a))))
         nomodPp = nomodResults.map(r => (r.error ? null : r.data.performance))
 
         // get max combo from the nomod difficulty attributes when the beatmap response doesn't include it
@@ -99,7 +114,7 @@ export async function processScorepost(post: PostV2) {
 
         // fetch modded PP + difficulty at each accuracy (only when mods are present)
         if (mods.length > 0) {
-            const moddedResults = await Promise.all(ppAccuracies.map(a => getPerformance(beatmap.id, mods, gamemode, a)))
+            const moddedResults = await Promise.all(ppAccuracies.map(a => getPerformance(beatmap.id, playRowMods, gamemode, a, playOpts(true, a))))
             moddedPp = moddedResults.map(r => (r.error ? null : r.data.performance))
             const firstSuccess = moddedResults.find(r => !r.error)
             if (firstSuccess && !firstSuccess.error) moddedDifficulty = firstSuccess.data
@@ -111,7 +126,8 @@ export async function processScorepost(post: PostV2) {
         beatmap,
         player,
         mode: gamemode,
-        mods,
+        mods: playRowMods,
+        nomodMods: nomodRowMods,
         acc,
         topScore,
         playerTopScore: topPlay,

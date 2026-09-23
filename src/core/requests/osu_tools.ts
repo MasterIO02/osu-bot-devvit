@@ -78,16 +78,26 @@ function gamemodeToRulesetId(mode: Gamemode): number {
     return map[mode]
 }
 
+/** extra score data for a performance calculation */
+export interface PerformanceOptions {
+    /** number of misses, defaults to 0 */
+    misses?: number | undefined
+    /** max combo achieved by the play */
+    combo?: number | undefined
+    /** score v1 total if score is stable, paired with CL mod */
+    legacyTotalScore?: number | undefined
+}
+
 /**
  * @description calculate performance and difficulty attributes for a beatmap with mods via the osu-tools API
  * @param beatmapId the beatmap's numeric ID
  * @param mods mod objects to apply (e.g. [{ acronym: "HD" }, { acronym: "DT", settings: { speed_change: 1.5 } }])
  * @param mode game mode for the ruleset
  * @param accuracy accuracy percentage (0-100), defaults to 100
- * @param misses number of misses, defaults to 0
+ * @param options extra score data (misses, legacy total score for stable scores)
  * @returns the performance response, or an error
  */
-export async function getPerformance(beatmapId: number, mods: Mod[], mode: Gamemode, accuracy?: number, misses?: number): Promise<{ error: false; data: PerformanceResponse } | { error: true }> {
+export async function getPerformance(beatmapId: number, mods: Mod[], mode: Gamemode, accuracy?: number, options?: PerformanceOptions): Promise<{ error: false; data: PerformanceResponse } | { error: true }> {
     const apiKey = await settings.get("osuToolsApiKey")
     if (!apiKey) {
         console.error("osu-tools API key not configured. Set osuToolsApiKey using the Devvit CLI.")
@@ -110,7 +120,9 @@ export async function getPerformance(beatmapId: number, mods: Mod[], mode: Gamem
             rulesetId: gamemodeToRulesetId(mode),
             mods: apiMods,
             accuracy: accuracy ?? 100,
-            misses: misses ?? 0
+            misses: options?.misses ?? 0,
+            combo: options?.combo,
+            legacyTotalScore: options?.legacyTotalScore
         })
 
         const response = await fetch(url, {
