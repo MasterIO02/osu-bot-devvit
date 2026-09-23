@@ -9,7 +9,7 @@ Built on [Devvit](https://developers.reddit.com/), Reddit's platform for buildin
 When a scorepost is submitted to r/osugame, the bot:
 
 1. Parses the post title for player name, beatmap, gamemode, accuracy and mods
-2. Finds the beatmap by searching the player's recent top plays and fetches other data to show from the osu! API v2. If the beatmap isn't found (e.g. the score is too old to still be in the player's lists), the bot still posts a player-only comment
+2. Finds the beatmap by searching the player's recent best scores and recent plays, and fetches other data to show from the osu! API v2. If the beatmap isn't found (e.g. the score is too old to still be in the player's lists), the bot still posts a player-only comment
 3. Fetches modded difficulty attributes and PP at multiple accuracies from the [osu-tools API](https://github.com/issoudotbest/osu-tools-api) (issou.best instance)
 4. Builds a rich text comment with:
     - **Map header**: beatmap link, mapper link, optional guest mapper (GD), gamemode
@@ -31,6 +31,26 @@ Modded difficulty attributes (CS, AR, OD, HP, SR, BPM, Length) and PP at every a
 
 Plays done on stable are calculated with the classic mod + legacy total score, so their PP matches the osu! website. Those plays' rows are labeled with the CL mod (`+CL` instead of `NoMod`).
 
+## Formatting scoreposts
+
+The bot depends on you to properly format your title! The beginning of your post title should look something like this:
+
+```
+Player Name | Song Artist - Song Title [Diff Name] +Mods
+```
+
+For example:
+
+```
+Cookiezi | xi - FREEDOM DiVE [FOUR DIMENSIONS] +HDHR 99.83% FC 800pp *NEW PP RECORD*
+```
+
+In general, anything following the [official criteria](https://reddit.com/r/osugame/wiki/scoreposting) should work.
+
+Prefixing the mods with "+" makes parsing much more consistent, for example "+HDHR".
+
+Gamemode tags are also detected when they lead the title, like `osu!mania | Player | ...` or `[osu!taiko] Player | ...`.
+
 ## Capabilities vs. the old Python bot
 
 This new osu-bot is at parity with the old Python bot (with a few caveats).
@@ -47,7 +67,7 @@ TODO: o!rdr implementation
 
 ### Limitations
 
-These come from Reddit's RTJSON format and its conversion to markdown on old Reddit, not from this bot:
+These come from Reddit's RTJSON format and its conversion to markdown, not from this bot:
 
 1. **No tooltips on links**: RTJSON has a field to add tooltips but it doesn't work, not even on old Reddit. So the old bot's hover text (mapper rename, player stats, map attributes) can't be reproduced
 2. **Bold breaks on old Reddit**: Reddit's RTJSON -> markdown conversion inserts stray `**` markers between the intended pair, so bold text only renders correctly on new Reddit
