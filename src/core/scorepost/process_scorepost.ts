@@ -1,6 +1,6 @@
 import type { PostV2 } from "@devvit/web/shared"
 import { reddit, type Comment } from "@devvit/web/server"
-import { playerRegex, beatmapRegex, accRegex, tailRegex } from "./consts"
+import { playerRegex, beatmapRegex, accRegex, tailRegex, parensRegex } from "./consts"
 import { getMods, sameMods } from "./helpers/get_mods"
 import { matchGamemode } from "./helpers/match_gamemode"
 import { lookupUser, getBeatmapScores, type Mod, type Score, type BeatmapOwner } from "../requests/osu_api"
@@ -14,7 +14,9 @@ export async function processScorepost(post: PostV2) {
         console.log(`No player in scorepost title: ${post.title}`)
         return
     }
-    const playerName = playerMatch[1]!.trim()
+
+    // strip parenthesized annotations from the player name ("Player (old name)"):
+    const playerName = playerMatch[1]!.replace(parensRegex, "").trim()
 
     const beatmapMatch = beatmapRegex.exec(post.title)
     if (!beatmapMatch) {

@@ -238,6 +238,20 @@ describe("E2E: Scorepost Processing", () => {
             expect(beatmapSearch.searchBeatmap).toHaveBeenCalled()
         })
 
+        it("strips parenthesized annotations from the player name", async () => {
+            const post = makePost("4k110sh1 (lolol233) | mafumafu - Yuugure Semi Nikki [0108] +DT 97.54% FC")
+
+            vi.mocked(osuApi.lookupUser).mockResolvedValue({ error: false, data: makeUser({ username: "4k110sh1" }) })
+            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({ beatmap: makeBeatmap(), matchedScore: null, topPlay: null })
+            vi.mocked(osuApi.getBeatmapScores).mockResolvedValue({ error: false, data: { scores: [] } })
+            vi.mocked(osuApi.getUserBestScores).mockResolvedValue({ error: false, data: [] })
+
+            await processScorepost(post)
+
+            expect(osuApi.lookupUser).toHaveBeenCalledWith("4k110sh1", "osu")
+            expect(beatmapSearch.searchBeatmap).toHaveBeenCalled()
+        })
+
         it("processes scorepost with mods", async () => {
             const post = makePost("Player | Artist - Song [Insane] +HDDT 98.5% FC")
 

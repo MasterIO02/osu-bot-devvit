@@ -1,11 +1,5 @@
 import { getUserBestScores, getUserRecentScores, getBeatmap, type Score, type BeatmapExtended, type Gamemode } from "../requests/osu_api"
-
-/** check if two beatmap strings match (case-insensitive, partial match) */
-function matchesBeatmap(apiStr: string, titleStr: string): boolean {
-    const a = apiStr.toLowerCase()
-    const t = titleStr.toLowerCase()
-    return a === t || a.includes(t) || t.includes(a)
-}
+import { parensRegex } from "./consts"
 
 export interface SearchResult {
     /** the scorepost's beatmap, if it was identified in the player's plays */
@@ -39,29 +33,16 @@ export async function searchBeatmap(userId: number, beatmapStr: string, mode: Ga
     return { beatmap: match?.beatmap ?? null, matchedScore: match?.score ?? null, topPlay }
 }
 
-/** build a beatmap display string from score-level beatmap + beatmapset data */
-function scoreMapStr(beatmap: { version: string }, beatmapset: { artist: string; title: string }): string {
-    return `${beatmapset.artist} - ${beatmapset.title} [${beatmap.version}]`
-}
-
 /** search the player's top 100 scores from the last week */
 async function searchBest(bestScores: { error: true } | { error: false; data: Score[] }, beatmapStr: string): Promise<BeatmapMatch | null> {
     if (bestScores.error) return null
 
     const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
 
-    for (const score of bestScores.data) {
-        const scoreDate = new Date(score.ended_at).getTime()
-        if (scoreDate < oneWeekAgo) continue
+    // skip scores older than a week. if score is missing ended_at then it gets computed as NaN and is kept
+    const candidates = bestScores.data.filter(score => !(new Date(score.ended_at).getTime() < oneWeekAgo) && Boolean(score.beatmap && score.beatmapset))
 
-        // use beatmapset (top-level on score) + beatmap version for filtering
-        if (!score.beatmap || !score.beatmapset) continue
-        if (!matchesBeatmap(scoreMapStr(score.beatmap, score.beatmapset), beatmapStr)) continue
-
-        const bmap = await getBeatmap(score.beatmap.id)
-        if (!bmap.error) return { beatmap: bmap.data, score }
-    }
-    return null
+    return findMatch(candidates, beatmapStr)
 }
 
 /** search the player's 50 most recent plays */
@@ -70,16 +51,48 @@ async function searchRecent(userId: number, beatmapStr: string, mode: Gamemode):
     if (recentScores.error) return null
 
     const seen = new Set<number>()
-
-    for (const score of recentScores.data) {
-        if (!score.beatmap || !score.beatmapset) continue
-        if (seen.has(score.beatmap.id)) continue
+    const candidates = recentScores.data.filter(score => {
+        if (!score.beatmap || !score.beatmapset) return false
+        if (seen.has(score.beatmap.id)) return false
         seen.add(score.beatmap.id)
+        return true
+    })
 
-        if (!matchesBeatmap(scoreMapStr(score.beatmap, score.beatmapset), beatmapStr)) continue
+    return findMatch(candidates, beatmapStr)
+}
 
-        const bmap = await getBeatmap(score.beatmap.id)
-        if (!bmap.error) return { beatmap: bmap.data, score }
+/**
+ * find the first candidate whose map matches and fetch its beatmap data
+ */
+async function findMatch(candidates: Score[], beatmapStr: string): Promise<BeatmapMatch | null> {
+    // try to match all beatmaps on matchesBeatmap first, then matchesBeatmapStripped
+    // matchesBeatmapStripped is used for the edge case where scoreposter adds more data to a beatmap title, while it's not there in the actual beatmap
+    // example: scoreposter adds "(new remix)" while map doesn't have that, we'll try to match the map without that "(new remix)"
+    for (const matches of [matchesBeatmap, matchesBeatmapStripped]) {
+        for (const score of candidates) {
+            if (!matches(scoreMapStr(score.beatmap!, score.beatmapset!), beatmapStr)) continue
+
+            const bmap = await getBeatmap(score.beatmap!.id)
+            if (!bmap.error) return { beatmap: bmap.data, score }
+        }
     }
     return null
+}
+
+/** build a beatmap display string from score-level beatmap + beatmapset data */
+function scoreMapStr(beatmap: { version: string }, beatmapset: { artist: string; title: string }): string {
+    return `${beatmapset.artist} - ${beatmapset.title} [${beatmap.version}]`
+}
+
+/** check if two beatmap strings match (case-insensitive, partial match) */
+function matchesBeatmap(apiStr: string, titleStr: string): boolean {
+    const a = apiStr.toLowerCase()
+    const t = titleStr.toLowerCase()
+    return a === t || a.includes(t) || t.includes(a)
+}
+
+/** like matchesBeatmap, but with parenthesized decorations removed from the title ("Song (new remix)" -> "Song") */
+function matchesBeatmapStripped(apiStr: string, titleStr: string): boolean {
+    const stripped = titleStr.replace(parensRegex, "").trim()
+    return stripped !== titleStr && matchesBeatmap(apiStr, stripped)
 }

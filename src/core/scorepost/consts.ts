@@ -38,6 +38,9 @@ export const accRegex = /(\d{1,3}(?:[\.,]\d+)?)%/
 /** matches anything between parenthesis */
 export const parenthesisRegex = /\((.+?)\)/
 
+/** matches parenthesized groups and the whitespace before them, to strip decorations ("Player (annotation)" -> "Player") */
+export const parensRegex = /\s*\([^)]*\)/g
+
 /** matches anything between brackets */
 export const bracketsRegex = /\[(.+?)\]/
 

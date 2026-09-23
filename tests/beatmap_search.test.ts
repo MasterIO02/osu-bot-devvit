@@ -99,6 +99,32 @@ describe("searchBeatmap", () => {
         expect((await searchBeatmap(1, "Artist - Title [Hard] [Extra]", "osu")).beatmap?.id).toBe(123456)
     })
 
+    it("prefers an exact match over a stripped-decoration match earlier in the list", async () => {
+        // the scorepost is about the TV Size version, but the plain full version ranks higher in best scores:
+        // stripping the title's parentheses would match the full version first if the passes weren't split
+        vi.mocked(osuApi.getUserBestScores).mockResolvedValue({
+            error: false,
+            data: [
+                makeScore({ beatmap: embeddedBeatmap(111, "Hard") }),
+                makeScore({ beatmap: embeddedBeatmap(222, "Hard"), beatmapset: { artist: "Artist", creator: "Mapper", title: "Title (TV Size)", ranked_date: null } })
+            ]
+        })
+
+        const result = await searchBeatmap(1, "Artist - Title (TV Size) [Hard]", "osu")
+
+        // the exact TV Size match wins even though the full version would match with the decoration stripped
+        expect(result.beatmap?.id).toBe(222)
+    })
+
+    it("matches a title with a parenthesized decoration that isn't part of the map name", async () => {
+        vi.mocked(osuApi.getUserBestScores).mockResolvedValue({ error: false, data: [makeScore()] })
+
+        // "(sped up ver.)" is added by the poster, the official title is just "Title"
+        const result = await searchBeatmap(1, "Artist - Title (sped up ver.) [Hard]", "osu")
+
+        expect(result.beatmap?.id).toBe(123456)
+    })
+
     it("skips best scores older than one week", async () => {
         const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString()
         vi.mocked(osuApi.getUserBestScores).mockResolvedValue({
