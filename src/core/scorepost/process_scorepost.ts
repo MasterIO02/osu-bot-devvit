@@ -67,20 +67,8 @@ export async function processScorepost(post: PostV2) {
     if (beatmap) {
         maxCombo = beatmap.max_combo ?? null
         const mapScores = await getBeatmapScores(beatmap.id, gamemode)
-        if (!mapScores.error) {
-            if (mapScores.data.scores.length > 0) {
-                topScore = mapScores.data.scores[0]!
-            }
-            // find max combo from a perfect combo score on the leaderboard
-            // TODO: instead of doing that maybe we could find it from the beatmap difficulty data response?
-            if (maxCombo === null) {
-                for (const score of mapScores.data.scores) {
-                    if (score.is_perfect_combo) {
-                        maxCombo = score.max_combo
-                        break
-                    }
-                }
-            }
+        if (!mapScores.error && mapScores.data.scores.length > 0) {
+            topScore = mapScores.data.scores[0]!
         }
 
         // detect guest mapper from beatmap owners (no parsing of "'s" in diff name like the old osu bot, most GDs have their mapper on the osu! API directly now)
@@ -102,6 +90,12 @@ export async function processScorepost(post: PostV2) {
         // fetch NoMod PP at each accuracy (always needed for the PP row)
         const nomodResults = await Promise.all(ppAccuracies.map(a => getPerformance(beatmap.id, [], gamemode, a)))
         nomodPp = nomodResults.map(r => (r.error ? null : r.data.performance))
+
+        // get max combo from the nomod difficulty attributes when the beatmap response doesn't include it
+        if (maxCombo === null) {
+            const firstSuccess = nomodResults.find(r => !r.error)
+            if (firstSuccess && !firstSuccess.error) maxCombo = firstSuccess.data.difficulty.maxCombo
+        }
 
         // fetch modded PP + difficulty at each accuracy (only when mods are present)
         if (mods.length > 0) {

@@ -265,6 +265,24 @@ describe("E2E: Scorepost Processing", () => {
 
             expect(osuTools.getPerformance).toHaveBeenCalled()
         })
+
+        it("gets max combo from the difficulty data of the NoMod performance requests when the beatmap has none", async () => {
+            const post = makePost("Player | Artist - Song [Hard] 99%")
+
+            vi.mocked(osuApi.lookupUser).mockResolvedValue({ error: false, data: makeUser() })
+            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({ beatmap: makeBeatmap({ max_combo: undefined }), topPlay: null })
+            vi.mocked(osuApi.getBeatmapScores).mockResolvedValue({ error: false, data: { scores: [] } })
+            vi.mocked(osuApi.getUserBestScores).mockResolvedValue({ error: false, data: [] })
+
+            // the default getPerformance mock (set in beforeEach) returns difficulty.maxCombo 1000
+            await processScorepost(post)
+
+            const submitted = vi.mocked(reddit.submitComment).mock.calls[0]?.[0]
+            expect(submitted).toBeDefined()
+            const text = extractText(JSON.parse((submitted as any).richtext.build()))
+            // max combo is formatted with a thousands separator (sep()) in the subheader
+            expect(text).toContain("1,000x max combo")
+        })
     })
 
     describe("Error Handling", () => {
