@@ -70,8 +70,7 @@ TODO: o!rdr implementation
 These come from Reddit's RTJSON format and its conversion to markdown, not from this bot:
 
 1. **No tooltips on links**: RTJSON has a field to add tooltips but it doesn't work, not even on old Reddit. So the old bot's hover text (mapper rename, player stats, map attributes) can't be reproduced
-2. **Bold breaks on old Reddit**: Reddit's RTJSON -> markdown conversion inserts stray `**` markers between the intended pair, so bold text only renders correctly on new Reddit
-3. **Table cells are not centered**: the same conversion breaks table column alignment, so there are no centered cells, they're all aligned to the left
+2. **Table cells are not centered**: the same conversion breaks table column alignment, so there are no centered cells, they're all aligned to the left
 
 These issues were already reported to Reddit.
 

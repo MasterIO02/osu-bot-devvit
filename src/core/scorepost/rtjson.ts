@@ -148,9 +148,11 @@ function buildSubheader(b: RichTextBuilder, beatmap: BeatmapExtended, topScore: 
     b.paragraph(p => {
         if (topScore) {
             const username = topScore.username ?? "Unknown"
-            p.text({ text: "#1: ", formatting: [fmt(BOLD, 0, 4)] })
-            p.link({ text: username, url: `${OSU_URL}/u/${topScore.user_id}` })
-            p.text({ text: ` (${statsStr})`, formatting: [fmt(BOLD, 0, statsStr.length + 3)] })
+            p.text({ text: "#1:", formatting: [fmt(BOLD, 0, 3)] })
+            p.text({ text: " " })
+            p.link({ text: username, url: `${OSU_URL}/u/${topScore.user_id}`, formatting: [fmt(BOLD, 0, username.length)] })
+            p.text({ text: " " })
+            p.text({ text: `(${statsStr})`, formatting: [fmt(BOLD, 0, statsStr.length + 2)] })
         } else {
             p.text({ text: statsStr, formatting: [fmt(BOLD, 0, statsStr.length)] })
         }
