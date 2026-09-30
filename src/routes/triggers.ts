@@ -2,6 +2,7 @@ import { Hono } from "hono"
 import { redis } from "@devvit/redis"
 import type { OnAppInstallRequest, OnCommentCreateRequest, OnPostCreateRequest, TriggerResponse } from "@devvit/web/shared"
 import { processPost } from "../core/process_post"
+import { processComment } from "../core/process_comment"
 
 export const triggers = new Hono()
 
@@ -44,9 +45,14 @@ triggers.post("/on-post-create", async c => {
 
 triggers.post("/on-comment-create", async c => {
     const input = await c.req.json<OnCommentCreateRequest>()
-    console.log(`New comment created in r/${input.subreddit?.name}: ${input.comment?.body}`)
 
-    // nothing to do... yet
+    if (!input.comment) return c.json<TriggerResponse>({ status: "ok" }, 200)
+
+    try {
+        await processComment(input.comment)
+    } catch (err) {
+        console.error(`Error processing comment ${input.comment.id}:`, err)
+    }
 
     return c.json<TriggerResponse>({ status: "ok" }, 200)
 })

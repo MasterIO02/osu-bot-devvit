@@ -48,8 +48,7 @@ export async function getAccessToken(): Promise<string> {
     const data = TokenResponseSchema.parse(rawData)
 
     // cache the token in Redis with TTL matching the token lifetime
-    await redis.set(TOKEN_REDIS_KEY, data.access_token)
-    await redis.expire(TOKEN_REDIS_KEY, data.expires_in)
+    await redis.set(TOKEN_REDIS_KEY, data.access_token, { expiration: new Date(Date.now() + data.expires_in * 1000) })
 
     console.log("Regenerated the osu! API v2 access_token")
     return data.access_token

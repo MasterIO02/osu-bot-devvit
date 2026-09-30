@@ -7,6 +7,8 @@ import { lookupUser, getBeatmapScores, type Mod, type Score, type BeatmapOwner }
 import { getPerformance } from "../requests/osu_tools"
 import { searchBeatmap } from "./beatmap_search"
 import { buildComment, type CommentData } from "./rtjson"
+import { findOwnComment } from "../find_own_comment"
+import { storeCommentRichtext } from "../video_links/process_video_links"
 
 export async function processScorepost(post: PostV2) {
     const playerMatch = playerRegex.exec(post.title)
@@ -149,6 +151,9 @@ export async function processScorepost(post: PostV2) {
 
     console.log("Generated comment:", richtext.build())
 
+    // store the comment's RTJSON so YouTube links found in the post's comments can be added into it later without rebuilding it from API data
+    await storeCommentRichtext(postId, richtext.build())
+
     // post the comment, 3 attempts total
     const MAX_RETRIES = 2
     let lastError: unknown
@@ -188,23 +193,5 @@ export async function processScorepost(post: PostV2) {
         console.log(`Comment pinned on ${postId}`)
     } catch (err) {
         console.error(`Failed to pin comment on ${postId}:`, err)
-    }
-}
-
-/**
- * find a top-level comment on the post authored by the app account, if one exists.
- * used to avoid posting a duplicate: a submitComment call that reported failure may still have created the comment server-side (e.g. a timeout after Reddit received it)
- */
-async function findOwnComment(postId: `t3_${string}`): Promise<Comment | null> {
-    try {
-        const appUser = await reddit.getAppUser()
-        if (!appUser) return null
-        // the bot comments within moments of the post's creation, so if its comment exists it's among the oldest: sort "old" with a small limit is enough to find it
-        const comments = await reddit.getComments({ postId, depth: 1, limit: 10, sort: "old" }).all()
-        return comments.find(c => c.authorId === appUser.id) ?? null
-    } catch (err) {
-        // a failed check shouldn't block posting: the trigger's redis claim still guards against concurrent duplicates
-        console.error(`Couldn't check for existing comments on ${postId}:`, err)
-        return null
     }
 }

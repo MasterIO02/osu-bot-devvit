@@ -1,10 +1,9 @@
-import { FormatRange } from "@devvit/web/server"
 import { BeatmapExtended, BeatmapOwner, Gamemode, Mod, Score, User } from "../requests/osu_api"
 import type { PerformanceResponse } from "../requests/osu_tools"
+import { BOLD, fmt, SUPERSCRIPT } from "../rtjson"
 import { memes } from "./consts"
 import { combineMods } from "./helpers/get_mods"
-import { RichTextBuilder } from "@devvit/shared-types/richtext/RichTextBuilder.js"
-import { makeFormatting } from "@devvit/shared-types/richtext/elements.js"
+import { RichTextBuilder } from "@devvit/web/server"
 
 const OSU_URL = "https://osu.ppy.sh"
 
@@ -57,18 +56,6 @@ export function buildComment(data: CommentData): RichTextBuilder | null {
     buildFooter(builder)
 
     return builder
-}
-
-// formatting flag constants from the RTJSON spec
-const BOLD = 1
-const SUPERSCRIPT = 32
-
-/** helper to create a FormatRange for RTJSON text formatting */
-function fmt(flags: number, start: number, length: number): FormatRange {
-    const opts: { bold?: boolean; superscript?: boolean; startIndex: number; length: number } = { startIndex: start, length }
-    if (flags & BOLD) opts.bold = true
-    if (flags & SUPERSCRIPT) opts.superscript = true
-    return makeFormatting(opts)
 }
 
 /** format a number with locale-appropriate thousand separators */

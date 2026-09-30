@@ -18,6 +18,7 @@ When a scorepost is submitted to r/osugame, the bot:
     - **Player table**: global rank, country rank, pp, accuracy, playcount, top play
     - **Footer**: meme + attribution links
 5. Posts the comment and pins it (as moderator)
+6. Watches the post's comments for YouTube links and adds them to the bot's pinned comment
 
 ## Mod support
 

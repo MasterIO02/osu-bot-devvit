@@ -5,6 +5,7 @@ import * as osuApi from "../../src/core/requests/osu_api"
 import * as osuTools from "../../src/core/requests/osu_tools"
 import * as beatmapSearch from "../../src/core/scorepost/beatmap_search"
 import { reddit } from "@devvit/web/server"
+import { redis } from "@devvit/redis"
 import type { BeatmapExtended, Score, User, Gamemode } from "../../src/core/requests/osu_api"
 
 // Mock all external dependencies
@@ -12,15 +13,19 @@ vi.mock("../../src/core/requests/osu_api")
 vi.mock("../../src/core/requests/osu_tools")
 vi.mock("../../src/core/scorepost/beatmap_search")
 vi.mock("@devvit/redis")
-vi.mock("@devvit/web/server", () => ({
-    reddit: {
-        submitComment: vi.fn().mockResolvedValue({
-            distinguish: vi.fn().mockResolvedValue(undefined)
-        }),
-        getAppUser: vi.fn().mockResolvedValue({ id: "t2_app", username: "osu-bot" }),
-        getComments: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) })
+vi.mock("@devvit/web/server", async importOriginal => {
+    const actual = await importOriginal<typeof import("@devvit/web/server")>()
+    return {
+        ...actual,
+        reddit: {
+            submitComment: vi.fn().mockResolvedValue({
+                distinguish: vi.fn().mockResolvedValue(undefined)
+            }),
+            getAppUser: vi.fn().mockResolvedValue({ id: "t2_app", username: "osu-bot" }),
+            getComments: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) })
+        }
     }
-}))
+})
 
 // Helper to create mock objects
 function makeBeatmap(overrides: Partial<BeatmapExtended> = {}): BeatmapExtended {
@@ -763,6 +768,24 @@ describe("E2E: Scorepost Processing", () => {
 
             expect(reddit.submitComment).toHaveBeenCalledTimes(1)
             expect(distinguish).toHaveBeenCalledWith(true)
+        })
+    })
+
+    describe("Comment RTJSON Storage", () => {
+        it("stores the posted comment's RTJSON under the key processVideoLinks reads, with a TTL", async () => {
+            const post = makePost("Player | Artist - Song [Hard] +HDDT 98.5% FC")
+
+            vi.mocked(osuApi.lookupUser).mockResolvedValue({ error: false, data: makeUser() })
+            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({ beatmap: makeBeatmap(), matchedScore: null, topPlay: null })
+            vi.mocked(osuApi.getBeatmapScores).mockResolvedValue({ error: false, data: { scores: [] } })
+            vi.mocked(osuApi.getUserBestScores).mockResolvedValue({ error: false, data: [] })
+
+            await processScorepost(post)
+
+            const submitted = vi.mocked(reddit.submitComment).mock.calls[0]?.[0] as any
+            expect(submitted).toBeDefined()
+            // the stored RTJSON is exactly the comment that was posted, so video links can be spliced into it later
+            expect(vi.mocked(redis.set)).toHaveBeenCalledWith("comment-rtjson:t3_test", submitted.richtext.build(), expect.objectContaining({ expiration: expect.any(Date) }))
         })
     })
 })
