@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { getMods, sameMods } from "../src/core/scorepost/helpers/get_mods"
+import { getMods, sameMods, combineMods } from "../src/core/scorepost/helpers/get_mods"
 import type { Mod } from "../src/core/requests/osu_api"
 
 describe("getMods", () => {
@@ -342,5 +342,40 @@ describe("sameMods", () => {
 
     it("rejects a score against an empty title", () => {
         expect(sameMods(mods("HD"), [])).toBe(false)
+    })
+})
+
+describe("combineMods", () => {
+    it("formats plain mods", () => {
+        expect(combineMods([{ acronym: "HD" }, { acronym: "DT" }])).toBe("+HDDT")
+    })
+
+    it("returns an empty string for nomod", () => {
+        expect(combineMods([])).toBe("")
+    })
+
+    it("shows a custom rate (title-parsed string setting)", () => {
+        expect(combineMods([{ acronym: "HD" }, { acronym: "DT", settings: { speed_change: "1.1" } }])).toBe("+HDDT(x1.1)")
+    })
+
+    it("shows a custom rate (API numeric setting)", () => {
+        expect(combineMods([{ acronym: "DT", settings: { speed_change: 1.1 } }])).toBe("+DT(x1.1)")
+    })
+
+    it("shows difficulty adjust attributes in AR, CS, OD, HP order", () => {
+        expect(combineMods([{ acronym: "DA", settings: { overall_difficulty: 8.5, approach_rate: 9 } }])).toBe("+DA(AR9, OD8.5)")
+    })
+
+    it("rounds values and trims trailing zeros", () => {
+        expect(combineMods([{ acronym: "DA", settings: { approach_rate: "9.10", circle_size: "4.256" } }])).toBe("+DA(AR9.1, CS4.26)")
+    })
+
+    it("omits unrecognized or non-numeric settings", () => {
+        expect(combineMods([{ acronym: "FL", settings: { follow_delay: "unknown" } }])).toBe("+FL")
+    })
+
+    it("round-trips title-parsed mods", () => {
+        expect(combineMods(getMods("Player | Artist - Title [Diff] +HDDT(x1.1) 99.5%"))).toBe("+HDDT(x1.1)")
+        expect(combineMods(getMods("Player | Artist - Title [Diff] +DA(AR9, OD8.5) 99.5%"))).toBe("+DA(AR9, OD8.5)")
     })
 })

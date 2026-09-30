@@ -168,6 +168,44 @@ function parseModSettings(acronym: string, raw: string): Record<string, string> 
     return settings
 }
 
+/** format a mod setting value for display: 1.1 → "1.1", 9 → "9", 8.5 → "8.5" */
+function formatModValue(value: unknown): string | null {
+    // check if the osu api didn't send us shit, as mod settings value can be anything depending on the setting
+    const num = typeof value === "number" || typeof value === "string" ? Number(value) : NaN
+    if (!isFinite(num)) return null
+    return String(Number(num.toFixed(2)))
+}
+
+/**
+ * format a single mod's settings in the title notation, like "DT(x1.1)" or "DA(AR9, OD8.5)" (inverse of parseModSettings)
+ * @returns the parenthesized settings, or an empty string when there's no recognized setting
+ */
+export function formatModSettings(mod: Mod): string {
+    if (!mod.settings) return ""
+    const parts: string[] = []
+
+    // rate change: DT/NC/HT/DC custom rates
+    const speed = formatModValue(mod.settings.speed_change)
+    if (speed !== null) parts.push(`x${speed}`)
+
+    // difficulty adjust attributes, in DIFFICULTY_ADJUST_KEYS order (AR, CS, OD, HP)
+    for (const [label, key] of Object.entries(DIFFICULTY_ADJUST_KEYS)) {
+        const value = formatModValue(mod.settings[key])
+        if (value !== null) parts.push(`${label}${value}`)
+    }
+
+    return parts.length > 0 ? `(${parts.join(", ")})` : ""
+}
+
+/**
+ * format mods to a human-readable string in the title notation, like "+HDDT", "+DT(x1.1)" or "+DA(AR9, OD8.5)" (inverse of getMods)
+ * @returns an empty string for an empty mod array (nomod)
+ */
+export function combineMods(mods: Mod[]): string {
+    if (mods.length === 0) return ""
+    return `+${mods.map(m => `${m.acronym}${formatModSettings(m)}`).join("")}`
+}
+
 /**
  * @description compare a score's mods with the title-parsed mods by acronym only (settings-insensitive)
  * @returns true when both mod sets contain the same acronyms

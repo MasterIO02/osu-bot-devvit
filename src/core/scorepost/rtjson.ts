@@ -2,6 +2,7 @@ import { FormatRange } from "@devvit/web/server"
 import { BeatmapExtended, BeatmapOwner, Gamemode, Mod, Score, User } from "../requests/osu_api"
 import type { PerformanceResponse } from "../requests/osu_tools"
 import { memes } from "./consts"
+import { combineMods } from "./helpers/get_mods"
 import { RichTextBuilder } from "@devvit/shared-types/richtext/RichTextBuilder.js"
 import { makeFormatting } from "@devvit/shared-types/richtext/elements.js"
 
@@ -73,13 +74,6 @@ function fmt(flags: number, start: number, length: number): FormatRange {
 /** format a number with locale-appropriate thousand separators */
 function sep(n: number): string {
     return n.toLocaleString("en-US")
-}
-
-/** format mods to a human-readable string like "+HDDT" */
-function combineMods(mods: Mod[]): string {
-    // TODO: maybe also handle DT rate change + DA (difficulty adjust) attribute changes
-    if (mods.length === 0) return ""
-    return `+${mods.map(m => m.acronym).join("")}`
 }
 
 /** format a score's accuracy as a percentage string with 2 decimal places */
