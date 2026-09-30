@@ -3,12 +3,16 @@ import { serve } from "@hono/node-server"
 import { createServer, getServerPort } from "@devvit/web/server"
 import { api } from "./routes/api"
 import { triggers } from "./routes/triggers"
+import { menu } from "./routes/menu"
 
 const app = new Hono()
 const internal = new Hono()
 
 // routes triggered by reddit when something happens
 internal.route("/triggers", triggers)
+
+// actions shown in the comment's mod menu
+internal.route("/menu", menu)
 
 // these were in the devvit template they may be required..?
 app.route("/api", api)

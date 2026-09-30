@@ -1,5 +1,5 @@
 import type { CommentV2 } from "@devvit/web/shared"
-import { reddit } from "@devvit/web/server"
+import { reddit, type Comment } from "@devvit/web/server"
 import { redis } from "@devvit/redis"
 import { findOwnComment } from "../find_own_comment"
 import { youtubeUrlRegex } from "./consts"
@@ -112,4 +112,40 @@ function isYouTubeLinksParagraph(node: unknown): boolean {
     // the youtube links paragraph is the one where the first text node is its header
     const firstChild = (node as { c?: { t?: unknown }[] })?.c?.[0]
     return (node as { e?: string })?.e === "par" && typeof firstChild?.t === "string" && firstChild.t.startsWith("YouTube links:")
+}
+
+/** what became of a clear request, mapped to a toast by the menu route */
+export type ClearResult = "cleared" | "nothing" | "no-rtjson" | "edit-failed"
+
+/**
+ * remove every YouTube link collected on a post from our scorepost comment, without deleting the comment:
+ * the post's video list is emptied and the YouTube links paragraph is stripped from the comment by editing it
+ */
+export async function clearYouTubeLinks(comment: Pick<Comment, "postId" | "edit">): Promise<ClearResult> {
+    const postId = comment.postId
+
+    // no stored RTJSON means the key expired (or we never commented on this post?): nothing to strip the paragraph from
+    const storedRichtext = await redis.get(rtjsonKey(postId))
+    if (!storedRichtext) return "no-rtjson"
+
+    const document = JSON.parse(storedRichtext).document
+    const cleared = (document as unknown[]).filter(node => !isYouTubeLinksParagraph(node))
+
+    // nothing to clear when the comment has no links paragraph and no collected videos to rebuild it from
+    const videos = await redis.zRange(videosKey(postId), 0, -1)
+    if (cleared.length === document.length && videos.length === 0) return "nothing"
+
+    // clear the video list first: if the edit below fails, the next video link rebuilds the paragraph from the (now empty) list anyway
+    await redis.del(videosKey(postId))
+    await storeCommentRichtext(postId, JSON.stringify({ document: cleared }))
+
+    try {
+        await comment.edit({ richtext: { document: cleared } })
+    } catch (err) {
+        console.error(`Failed to strip the YouTube links from the scorepost comment on ${postId}:`, err)
+        return "edit-failed"
+    }
+
+    console.log(`Cleared the YouTube links from the scorepost comment on ${postId}`)
+    return "cleared"
 }

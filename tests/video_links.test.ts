@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { addYouTubeLinks } from "../src/core/video_links/process_video_links"
+import { addYouTubeLinks, clearYouTubeLinks } from "../src/core/video_links/process_video_links"
 import { youtubeUrlRegex } from "../src/core/video_links/consts"
 import { processComment } from "../src/core/process_comment"
 import { redis } from "@devvit/redis"
@@ -25,6 +25,10 @@ vi.mock("@devvit/redis", () => ({
             state.zsets.set(key, zset)
         }),
         zRange: vi.fn(async (key: string) => [...(state.zsets.get(key) ?? [])].sort((a, b) => a.score - b.score)),
+        del: vi.fn(async (key: string) => {
+            state.zsets.delete(key)
+            state.strings.delete(key)
+        }),
         expire: vi.fn(async () => {})
     }
 }))
@@ -71,6 +75,7 @@ beforeEach(() => {
     vi.mocked(redis.set).mockClear()
     vi.mocked(redis.zAdd).mockClear()
     vi.mocked(redis.expire).mockClear()
+    vi.mocked(redis.del).mockClear()
 })
 
 describe("addYouTubeLinks", () => {
@@ -201,6 +206,58 @@ describe("processComment", () => {
         // and the stored document got the paragraph, so the next link splices onto the updated version
         const stored = JSON.parse(state.strings.get("comment-rtjson:t3_post1")!)
         expect(youtubeLinks(youtubeParagraph(stored)).map((l: any) => l.u)).toEqual(["https://youtu.be/dQw4w9WgXcQ"])
+    })
+})
+
+describe("clearYouTubeLinks", () => {
+    /** a bot comment stub with the same postId/edit surface clearYouTubeLinks uses */
+    const ownComment = (postId = "t3_post1") => ({ postId, edit: editMock }) as any
+
+    it("empties the video list and strips the paragraph from the comment without deleting it", async () => {
+        const withLinks = addYouTubeLinks(makeStoredDocument().document, ["dQw4w9WgXcQ"])
+        state.strings.set("comment-rtjson:t3_post1", JSON.stringify({ document: withLinks }))
+        state.zsets.set("comment-videos:t3_post1", [{ member: "dQw4w9WgXcQ", score: 1 }])
+
+        const result = await clearYouTubeLinks(ownComment())
+
+        expect(result).toBe("cleared")
+        expect(editMock).toHaveBeenCalledTimes(1)
+        const edited = vi.mocked(editMock).mock.calls[0]![0] as any
+        expect(edited.richtext.document).toEqual(makeStoredDocument().document)
+        // the video list is emptied so the next collected link starts a fresh paragraph
+        expect(vi.mocked(redis.del)).toHaveBeenCalledWith("comment-videos:t3_post1")
+        // and the stored document is updated too, so it stays in sync with the edited comment
+        const stored = JSON.parse(state.strings.get("comment-rtjson:t3_post1")!)
+        expect(stored.document).toEqual(makeStoredDocument().document)
+    })
+
+    it("returns nothing when the comment has no links and no collected videos", async () => {
+        state.strings.set("comment-rtjson:t3_post1", JSON.stringify(makeStoredDocument()))
+
+        const result = await clearYouTubeLinks(ownComment())
+
+        expect(result).toBe("nothing")
+        expect(editMock).not.toHaveBeenCalled()
+    })
+
+    it("returns no-rtjson when the comment's document was never stored (or expired)", async () => {
+        const result = await clearYouTubeLinks(ownComment("t3_never"))
+
+        expect(result).toBe("no-rtjson")
+        expect(editMock).not.toHaveBeenCalled()
+    })
+
+    it("still empties the video list when editing the comment fails", async () => {
+        const withLinks = addYouTubeLinks(makeStoredDocument().document, ["dQw4w9WgXcQ"])
+        state.strings.set("comment-rtjson:t3_post1", JSON.stringify({ document: withLinks }))
+        state.zsets.set("comment-videos:t3_post1", [{ member: "dQw4w9WgXcQ", score: 1 }])
+        editMock.mockRejectedValueOnce(new Error("edit failed"))
+
+        const result = await clearYouTubeLinks(ownComment())
+
+        expect(result).toBe("edit-failed")
+        // the list was emptied first, so the paragraph can't come back on the next collected link
+        expect(vi.mocked(redis.del)).toHaveBeenCalledWith("comment-videos:t3_post1")
     })
 })
 

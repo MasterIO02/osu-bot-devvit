@@ -10,6 +10,17 @@
         "onPostCreate": "/internal/triggers/on-post-create",
         "onCommentCreate": "/internal/triggers/on-comment-create"
     },
+    "menu": {
+        "items": [
+            {
+                "label": "Clear YouTube links",
+                "description": "Remove the YouTube links collected in the bot's scorepost comment.",
+                "forUserType": "moderator",
+                "location": ["comment"],
+                "endpoint": "/internal/menu/clear-youtube-links"
+            }
+        ]
+    },
     "scripts": {
         "build": "vite build",
         "dev": "vite build --watch"
