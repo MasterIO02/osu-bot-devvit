@@ -20,7 +20,7 @@ When a scorepost is submitted to r/osugame, the bot:
 5. Posts the comment and pins it (as moderator)
 6. Watches the post's comments for YouTube links and adds them to the bot's pinned comment
 
-- Subreddit moderators have a "Clear YouTube links" action in the pinned comment's mod menu, which empties the collected links by editing the comment, in case someone sends unrelated YouTube links in the comments.
+- Subreddit moderators have a "Clear YouTube links" action in the comment mod menu, which empties the collected links by editing the comment, in case someone sends unrelated YouTube links in the comments. The action can't be scoped to the bot's comments only (Devvit limitation, for now at least), so it shows on every comment, but it only ever acts on the bot's own scorepost comment.
 
 ## Mod support
 
