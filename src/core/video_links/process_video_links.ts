@@ -2,23 +2,15 @@ import type { CommentV2 } from "@devvit/web/shared"
 import { reddit, type Comment } from "@devvit/web/server"
 import { redis } from "@devvit/redis"
 import { findOwnComment } from "../find_own_comment"
-import { youtubeUrlRegex } from "./consts"
+import { COMMENT_KEY_TTL_SECONDS, commentVideosKey, youtubeUrlRegex } from "./consts"
 import { buildYouTubeLinksParagraph } from "./rtjson"
+import { loadCommentRichtext, storeCommentRichtext } from "../process_comment"
 
 /**
  * the IDs of the videos linked on a post are kept in a redis sorted set (scored by discovery time, so the [1], [2]... numbering follows the order they were posted),
  * and the RTJSON of our scorepost comment is stored when it's posted, so the YouTube links paragraph can be added in front of the footer and the comment edited,
  * without refetching all the beatmap and player data the comment was built from.
  */
-
-/** how long we keep the stored RTJSON and video list */
-const KEY_TTL_SECONDS = 7 * 24 * 60 * 60
-
-/** redis key holding the RTJSON document of the comment we posted on a scorepost */
-const rtjsonKey = (postId: string) => `comment-rtjson:${postId}`
-
-/** redis key holding the video IDs linked on a post */
-const videosKey = (postId: string) => `comment-videos:${postId}`
 
 /**
  * if the comment contains a video link we should add to the scorepost comment, add it
@@ -35,7 +27,7 @@ export async function processVideoLinks(comment: CommentV2) {
 
     // no stored RTJSON means we never commented on this post (or the key expired): nothing to add the link to.
     // we comment the moment a scorepost goes up, so if the comment isn't there yet it will almost certainly never be
-    const storedRichtext = await redis.get(rtjsonKey(postId))
+    const storedRichtext = await loadCommentRichtext(postId)
     if (!storedRichtext) return
 
     // ignore our own comments
@@ -52,7 +44,7 @@ export async function processVideoLinks(comment: CommentV2) {
 
     // rebuild the whole paragraph from the full video list and add it in front of the footer.
     // the sorted set is scored by discovery time, so zRange returns the IDs in the order they were posted
-    const videoIds = (await redis.zRange(videosKey(postId), 0, -1)).map(m => m.member)
+    const videoIds = (await redis.zRange(commentVideosKey(postId), 0, -1)).map(m => m.member)
     const document = addYouTubeLinks(JSON.parse(storedRichtext).document, videoIds)
 
     // store the updated RTJSON document. if the edit below fails, the next video link will rebuild the paragraph from the full list anyway
@@ -69,21 +61,16 @@ export async function processVideoLinks(comment: CommentV2) {
     }
 }
 
-/** store (or update) the RTJSON document of our comment on a post, so video links can be added into it later */
-export async function storeCommentRichtext(postId: string, richtext: string): Promise<void> {
-    await redis.set(rtjsonKey(postId), richtext, { expiration: new Date(Date.now() + KEY_TTL_SECONDS * 1000) })
-}
-
 /**
  * @description add a video ID (like youtube dQw4w9WgXcQ) to a post's video list
  * @returns false when it was already there so to guard against duplicate comments & redelivered events. true if added
  */
 export async function addVideoId(postId: string, videoId: string): Promise<boolean> {
-    const existing = await redis.zScore(videosKey(postId), videoId)
+    const existing = await redis.zScore(commentVideosKey(postId), videoId)
     if (existing !== undefined) return false
     // can't add key expiration directly in zAdd so using .expire() after instead
-    await redis.zAdd(videosKey(postId), { member: videoId, score: Date.now() })
-    await redis.expire(videosKey(postId), KEY_TTL_SECONDS)
+    await redis.zAdd(commentVideosKey(postId), { member: videoId, score: Date.now() })
+    await redis.expire(commentVideosKey(postId), COMMENT_KEY_TTL_SECONDS)
     return true
 }
 
@@ -125,18 +112,18 @@ export async function clearYouTubeLinks(comment: Pick<Comment, "postId" | "edit"
     const postId = comment.postId
 
     // no stored RTJSON means the key expired (or we never commented on this post?): nothing to strip the paragraph from
-    const storedRichtext = await redis.get(rtjsonKey(postId))
+    const storedRichtext = await loadCommentRichtext(postId)
     if (!storedRichtext) return "no-rtjson"
 
     const document = JSON.parse(storedRichtext).document
     const cleared = (document as unknown[]).filter(node => !isYouTubeLinksParagraph(node))
 
     // nothing to clear when the comment has no links paragraph and no collected videos to rebuild it from
-    const videos = await redis.zRange(videosKey(postId), 0, -1)
+    const videos = await redis.zRange(commentVideosKey(postId), 0, -1)
     if (cleared.length === document.length && videos.length === 0) return "nothing"
 
     // clear the video list first: if the edit below fails, the next video link rebuilds the paragraph from the (now empty) list anyway
-    await redis.del(videosKey(postId))
+    await redis.del(commentVideosKey(postId))
     await storeCommentRichtext(postId, JSON.stringify({ document: cleared }))
 
     try {

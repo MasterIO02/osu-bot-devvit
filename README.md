@@ -19,6 +19,7 @@ When a scorepost is submitted to r/osugame, the bot:
     - **Footer**: meme + attribution links
 5. Posts the comment and pins it (as moderator)
 6. Watches the post's comments for YouTube links and adds them to the bot's pinned comment
+7. Submits the posted play's replay to [o!rdr](https://ordr.issou.best) for rendering to a video, easily watchable via a link added to the top of the comment
 
 - Subreddit moderators have a "Clear YouTube links" action in the comment mod menu, which empties the collected links by editing the comment, in case someone sends unrelated YouTube links in the comments. The action can't be scoped to the bot's comments only (Devvit limitation, for now at least), so it shows on every comment, but it only ever acts on the bot's own scorepost comment.
 
@@ -66,7 +67,7 @@ Beyond the old bot:
 - **Spaced and comma-separated mods**: the old bot parsed `HD HR` and `HD, HR` as HD only; this bot handles both
 - **Parser tested against real titles**: the title parsing (player, beatmap, gamemode, mods) is run against a corpus of ~950 real scorepost titles collected from r/osugame (`tests/scorepost-samples.txt`), so title-format regressions are caught by the test suite instead of in production
 
-TODO: o!rdr implementation
+Caveat of the o!rdr integration: the old bot listened to o!rdr's websocket for render events, but websockets aren't available in Devvit, so this bot polls the renders through the REST API instead.
 
 ### Limitations
 

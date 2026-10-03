@@ -8,7 +8,8 @@ import { getPerformance } from "../requests/osu_tools"
 import { searchBeatmap } from "./beatmap_search"
 import { buildComment, type CommentData } from "./rtjson"
 import { findOwnComment } from "../find_own_comment"
-import { storeCommentRichtext } from "../video_links/process_video_links"
+import { submitScoreRender } from "../replay_video/process_replay_video"
+import { storeCommentRichtext } from "../process_comment"
 
 export async function processScorepost(post: PostV2) {
     const playerMatch = playerRegex.exec(post.title)
@@ -193,5 +194,14 @@ export async function processScorepost(post: PostV2) {
         console.log(`Comment pinned on ${postId}`)
     } catch (err) {
         console.error(`Failed to pin comment on ${postId}:`, err)
+    }
+
+    // submit the posted play's replay to o!rdr for rendering (the video link is added to the comment once the render finishes)
+    if (postedPlay) {
+        try {
+            await submitScoreRender(postId, postedPlay, gamemode)
+        } catch (err) {
+            console.error(`Failed to submit the replay render on ${postId}:`, err)
+        }
     }
 }

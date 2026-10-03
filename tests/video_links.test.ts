@@ -122,7 +122,7 @@ describe("addYouTubeLinks", () => {
 
 describe("processComment", () => {
     it("adds the linked video to the scorepost comment and stores the updated document", async () => {
-        state.strings.set("comment-rtjson:t3_post1", JSON.stringify(makeStoredDocument()))
+        state.strings.set("comment:rtjson:t3_post1", JSON.stringify(makeStoredDocument()))
 
         await processComment(makeComment("look at this https://youtu.be/dQw4w9WgXcQ"))
 
@@ -131,16 +131,16 @@ describe("processComment", () => {
         const links = youtubeLinks(youtubeParagraph(edited.richtext))
         expect(links.map((l: any) => l.u)).toEqual(["https://youtu.be/dQw4w9WgXcQ"])
         // the stored document and the video list are written with a TTL, so the keys don't outlive the post's relevance
-        expect(vi.mocked(redis.set)).toHaveBeenCalledWith("comment-rtjson:t3_post1", expect.any(String), expect.objectContaining({ expiration: expect.any(Date) }))
-        expect(vi.mocked(redis.zAdd)).toHaveBeenCalledWith("comment-videos:t3_post1", { member: "dQw4w9WgXcQ", score: expect.any(Number) })
-        expect(vi.mocked(redis.expire)).toHaveBeenCalledWith("comment-videos:t3_post1", 7 * 24 * 60 * 60)
+        expect(vi.mocked(redis.set)).toHaveBeenCalledWith("comment:rtjson:t3_post1", expect.any(String), expect.objectContaining({ expiration: expect.any(Date) }))
+        expect(vi.mocked(redis.zAdd)).toHaveBeenCalledWith("comment:videos:t3_post1", { member: "dQw4w9WgXcQ", score: expect.any(Number) })
+        expect(vi.mocked(redis.expire)).toHaveBeenCalledWith("comment:videos:t3_post1", 7 * 24 * 60 * 60)
         // the stored document is updated too, so the next link splices onto this version
-        const stored = JSON.parse(state.strings.get("comment-rtjson:t3_post1")!)
+        const stored = JSON.parse(state.strings.get("comment:rtjson:t3_post1")!)
         expect(youtubeLinks(youtubeParagraph(stored)).map((l: any) => l.u)).toEqual(["https://youtu.be/dQw4w9WgXcQ"])
     })
 
     it("numbers a second video after the first", async () => {
-        state.strings.set("comment-rtjson:t3_post1", JSON.stringify(makeStoredDocument()))
+        state.strings.set("comment:rtjson:t3_post1", JSON.stringify(makeStoredDocument()))
 
         await processComment(makeComment("https://youtu.be/dQw4w9WgXcQ"))
         await processComment(makeComment("https://www.youtube.com/watch?v=abcdefghijk"))
@@ -152,7 +152,7 @@ describe("processComment", () => {
     })
 
     it("ignores the same video posted again", async () => {
-        state.strings.set("comment-rtjson:t3_post1", JSON.stringify(makeStoredDocument()))
+        state.strings.set("comment:rtjson:t3_post1", JSON.stringify(makeStoredDocument()))
 
         await processComment(makeComment("https://youtu.be/dQw4w9WgXcQ"))
         await processComment(makeComment("https://www.youtube.com/watch?v=dQw4w9WgXcQ lol"))
@@ -161,7 +161,7 @@ describe("processComment", () => {
     })
 
     it("ignores comments that are replies, not top-level", async () => {
-        state.strings.set("comment-rtjson:t3_post1", JSON.stringify(makeStoredDocument()))
+        state.strings.set("comment:rtjson:t3_post1", JSON.stringify(makeStoredDocument()))
 
         await processComment(makeComment("https://youtu.be/dQw4w9WgXcQ", { parentId: "t1_other" }))
 
@@ -169,7 +169,7 @@ describe("processComment", () => {
     })
 
     it("ignores comments without a youtube link", async () => {
-        state.strings.set("comment-rtjson:t3_post1", JSON.stringify(makeStoredDocument()))
+        state.strings.set("comment:rtjson:t3_post1", JSON.stringify(makeStoredDocument()))
 
         await processComment(makeComment("sick play dude"))
 
@@ -177,13 +177,13 @@ describe("processComment", () => {
     })
 
     it("ignores our own comment", async () => {
-        state.strings.set("comment-rtjson:t3_post1", JSON.stringify(makeStoredDocument()))
+        state.strings.set("comment:rtjson:t3_post1", JSON.stringify(makeStoredDocument()))
 
         await processComment(makeComment("YouTube links: [1](https://youtu.be/dQw4w9WgXcQ)", { author: "osu-bot" }))
 
         expect(editMock).not.toHaveBeenCalled()
         // the video wasn't added to the post's list either
-        expect(state.zsets.has("comment-videos:t3_post1")).toBe(false)
+        expect(state.zsets.has("comment:videos:t3_post1")).toBe(false)
     })
 
     it("ignores posts we never commented on", async () => {
@@ -194,7 +194,7 @@ describe("processComment", () => {
     })
 
     it("keeps the video and updates the stored document but doesn't edit when our comment is gone", async () => {
-        state.strings.set("comment-rtjson:t3_post1", JSON.stringify(makeStoredDocument()))
+        state.strings.set("comment:rtjson:t3_post1", JSON.stringify(makeStoredDocument()))
         // findOwnComment finds nothing: the bot's comment was deleted or never made it
         vi.mocked(reddit.getComments).mockReturnValueOnce({ all: async () => [] } as any)
 
@@ -202,9 +202,9 @@ describe("processComment", () => {
 
         expect(editMock).not.toHaveBeenCalled()
         // the video stays in the post's list, so the next link rebuilds the paragraph from the full list (the self-healing path)
-        expect(state.zsets.get("comment-videos:t3_post1")).toEqual([{ member: "dQw4w9WgXcQ", score: expect.any(Number) }])
+        expect(state.zsets.get("comment:videos:t3_post1")).toEqual([{ member: "dQw4w9WgXcQ", score: expect.any(Number) }])
         // and the stored document got the paragraph, so the next link splices onto the updated version
-        const stored = JSON.parse(state.strings.get("comment-rtjson:t3_post1")!)
+        const stored = JSON.parse(state.strings.get("comment:rtjson:t3_post1")!)
         expect(youtubeLinks(youtubeParagraph(stored)).map((l: any) => l.u)).toEqual(["https://youtu.be/dQw4w9WgXcQ"])
     })
 })
@@ -215,8 +215,8 @@ describe("clearYouTubeLinks", () => {
 
     it("empties the video list and strips the paragraph from the comment without deleting it", async () => {
         const withLinks = addYouTubeLinks(makeStoredDocument().document, ["dQw4w9WgXcQ"])
-        state.strings.set("comment-rtjson:t3_post1", JSON.stringify({ document: withLinks }))
-        state.zsets.set("comment-videos:t3_post1", [{ member: "dQw4w9WgXcQ", score: 1 }])
+        state.strings.set("comment:rtjson:t3_post1", JSON.stringify({ document: withLinks }))
+        state.zsets.set("comment:videos:t3_post1", [{ member: "dQw4w9WgXcQ", score: 1 }])
 
         const result = await clearYouTubeLinks(ownComment())
 
@@ -225,14 +225,14 @@ describe("clearYouTubeLinks", () => {
         const edited = vi.mocked(editMock).mock.calls[0]![0] as any
         expect(edited.richtext.document).toEqual(makeStoredDocument().document)
         // the video list is emptied so the next collected link starts a fresh paragraph
-        expect(vi.mocked(redis.del)).toHaveBeenCalledWith("comment-videos:t3_post1")
+        expect(vi.mocked(redis.del)).toHaveBeenCalledWith("comment:videos:t3_post1")
         // and the stored document is updated too, so it stays in sync with the edited comment
-        const stored = JSON.parse(state.strings.get("comment-rtjson:t3_post1")!)
+        const stored = JSON.parse(state.strings.get("comment:rtjson:t3_post1")!)
         expect(stored.document).toEqual(makeStoredDocument().document)
     })
 
     it("returns nothing when the comment has no links and no collected videos", async () => {
-        state.strings.set("comment-rtjson:t3_post1", JSON.stringify(makeStoredDocument()))
+        state.strings.set("comment:rtjson:t3_post1", JSON.stringify(makeStoredDocument()))
 
         const result = await clearYouTubeLinks(ownComment())
 
@@ -249,15 +249,15 @@ describe("clearYouTubeLinks", () => {
 
     it("still empties the video list when editing the comment fails", async () => {
         const withLinks = addYouTubeLinks(makeStoredDocument().document, ["dQw4w9WgXcQ"])
-        state.strings.set("comment-rtjson:t3_post1", JSON.stringify({ document: withLinks }))
-        state.zsets.set("comment-videos:t3_post1", [{ member: "dQw4w9WgXcQ", score: 1 }])
+        state.strings.set("comment:rtjson:t3_post1", JSON.stringify({ document: withLinks }))
+        state.zsets.set("comment:videos:t3_post1", [{ member: "dQw4w9WgXcQ", score: 1 }])
         editMock.mockRejectedValueOnce(new Error("edit failed"))
 
         const result = await clearYouTubeLinks(ownComment())
 
         expect(result).toBe("edit-failed")
         // the list was emptied first, so the paragraph can't come back on the next collected link
-        expect(vi.mocked(redis.del)).toHaveBeenCalledWith("comment-videos:t3_post1")
+        expect(vi.mocked(redis.del)).toHaveBeenCalledWith("comment:videos:t3_post1")
     })
 })
 

@@ -4,6 +4,7 @@ import { buildComment, type CommentData } from "../../src/core/scorepost/rtjson"
 import * as osuApi from "../../src/core/requests/osu_api"
 import * as osuTools from "../../src/core/requests/osu_tools"
 import * as beatmapSearch from "../../src/core/scorepost/beatmap_search"
+import { submitScoreRender } from "../../src/core/replay_video/process_replay_video"
 import { reddit } from "@devvit/web/server"
 import { redis } from "@devvit/redis"
 import type { BeatmapExtended, Score, User, Gamemode } from "../../src/core/requests/osu_api"
@@ -12,6 +13,7 @@ import type { BeatmapExtended, Score, User, Gamemode } from "../../src/core/requ
 vi.mock("../../src/core/requests/osu_api")
 vi.mock("../../src/core/requests/osu_tools")
 vi.mock("../../src/core/scorepost/beatmap_search")
+vi.mock("../../src/core/replay_video/process_replay_video", () => ({ submitScoreRender: vi.fn() }))
 vi.mock("@devvit/redis")
 vi.mock("@devvit/web/server", async importOriginal => {
     const actual = await importOriginal<typeof import("@devvit/web/server")>()
@@ -74,6 +76,9 @@ function makeUser(overrides: Partial<User> = {}): User {
 
 function makeScore(overrides: Partial<Score> = {}): Score {
     return {
+        id: 456,
+        legacy_score_id: null,
+        has_replay: true,
         user_id: 1,
         username: "TestPlayer",
         accuracy: 0.985,
@@ -785,7 +790,58 @@ describe("E2E: Scorepost Processing", () => {
             const submitted = vi.mocked(reddit.submitComment).mock.calls[0]?.[0] as any
             expect(submitted).toBeDefined()
             // the stored RTJSON is exactly the comment that was posted, so video links can be spliced into it later
-            expect(vi.mocked(redis.set)).toHaveBeenCalledWith("comment-rtjson:t3_test", submitted.richtext.build(), expect.objectContaining({ expiration: expect.any(Date) }))
+            expect(vi.mocked(redis.set)).toHaveBeenCalledWith("comment:rtjson:t3_test", submitted.richtext.build(), expect.objectContaining({ expiration: expect.any(Date) }))
+        })
+    })
+
+    describe("Replay Rendering", () => {
+        const setupHappyMocks = () => {
+            vi.mocked(osuApi.lookupUser).mockResolvedValue({ error: false, data: makeUser() })
+            vi.mocked(osuApi.getBeatmapScores).mockResolvedValue({ error: false, data: { scores: [] } })
+            vi.mocked(osuApi.getUserBestScores).mockResolvedValue({ error: false, data: [] })
+        }
+
+        it("submits the matched play's replay for rendering once the comment is posted", async () => {
+            const post = makePost("Player | Artist - Song [Hard] +HDDT 98.5% FC")
+            setupHappyMocks()
+            const play = makeScore({ mods: [{ acronym: "HD" }, { acronym: "DT" }] })
+            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({ beatmap: makeBeatmap(), matchedScore: play, topPlay: null })
+
+            await processScorepost(post)
+
+            expect(submitScoreRender).toHaveBeenCalledTimes(1)
+            expect(submitScoreRender).toHaveBeenCalledWith("t3_test", play, "osu")
+            // the render is submitted only after the comment was posted
+            expect(vi.mocked(reddit.submitComment).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(submitScoreRender).mock.invocationCallOrder[0]!)
+        })
+
+        it.each([
+            ["no matched score", null],
+            ["a matched play with different mods than the title", makeScore({ mods: [{ acronym: "HR" }] })]
+        ] as [string, Score | null][])("doesn't submit a render when there's %s", async (_name, matchedScore) => {
+            const post = makePost("Player | Artist - Song [Hard] +HDDT 98.5% FC")
+            setupHappyMocks()
+            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({ beatmap: makeBeatmap(), matchedScore, topPlay: null })
+
+            await processScorepost(post)
+
+            expect(submitScoreRender).not.toHaveBeenCalled()
+        })
+
+        it("still completes the post when the render submission throws (the comment is already posted)", async () => {
+            const post = makePost("Player | Artist - Song [Hard] +HDDT 98.5% FC")
+            setupHappyMocks()
+            vi.mocked(beatmapSearch.searchBeatmap).mockResolvedValue({
+                beatmap: makeBeatmap(),
+                matchedScore: makeScore({ mods: [{ acronym: "HD" }, { acronym: "DT" }] }),
+                topPlay: null
+            })
+            vi.mocked(submitScoreRender).mockRejectedValueOnce(new Error("redis hiccup"))
+
+            await expect(processScorepost(post)).resolves.toBeUndefined()
+
+            // the comment was still posted and pinned
+            expect(reddit.submitComment).toHaveBeenCalledTimes(1)
         })
     })
 })

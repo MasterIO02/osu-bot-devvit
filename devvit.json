@@ -21,6 +21,13 @@
             }
         ]
     },
+    "scheduler": {
+        "tasks": {
+            "poll-ordr-render": {
+                "endpoint": "/internal/scheduler/poll-ordr-render"
+            }
+        }
+    },
     "scripts": {
         "build": "vite build",
         "dev": "vite build --watch"
@@ -52,6 +59,11 @@
             "osuToolsApiKey": {
                 "type": "string",
                 "label": "osu-tools API Key (on apis.issou.best)",
+                "isSecret": true
+            },
+            "ordrApiKey": {
+                "type": "string",
+                "label": "o!rdr API Key (on apis.issou.best)",
                 "isSecret": true
             }
         }

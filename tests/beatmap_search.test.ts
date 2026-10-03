@@ -33,6 +33,9 @@ function embeddedBeatmap(id: number, version: string) {
 
 function makeScore(overrides: Partial<Score> = {}): Score {
     return {
+        id: 456,
+        legacy_score_id: null,
+        has_replay: true,
         user_id: 1,
         username: "TestPlayer",
         accuracy: 0.99,

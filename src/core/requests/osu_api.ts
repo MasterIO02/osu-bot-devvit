@@ -122,6 +122,10 @@ const EmbeddedBeatmapSchema = z.object({
  * @see https://osu.ppy.sh/docs/index.html#score
  */
 const RawScoreSchema = z.object({
+    id: z.number(),
+    // generally not there. for some reason the osu api prefers to put the legacy id in the "id" field... so why even have this legacy_score_id
+    legacy_score_id: z.number().nullable().optional(),
+    has_replay: z.boolean().optional(),
     user_id: z.number(),
     accuracy: z.number(),
     mods: z.array(z.union([ModSchema, z.string()])),
@@ -141,6 +145,9 @@ const RawScoreSchema = z.object({
 /** normalize a raw score into a consistent shape (see comment on RawScoreSchema for the why, great and consistent api :wink:) */
 function normalizeScore(raw: z.infer<typeof RawScoreSchema>): Score {
     return {
+        id: raw.id,
+        legacy_score_id: raw.legacy_score_id || null,
+        has_replay: raw.has_replay,
         user_id: raw.user_id,
         username: raw.user?.username,
         accuracy: raw.accuracy,
@@ -186,6 +193,12 @@ export interface EmbeddedBeatmap {
 
 /** normalized score with mods always as objects and all fields present */
 export interface Score {
+    /** the score's ID in the solo (lazer) ID scheme */
+    id: number
+    /** the score's ID in the old stable ID scheme, null on scores set in lazer. but probably never filled, see comment in RawScoreSchema */
+    legacy_score_id: number | null
+    /** whether an online replay exists for this score */
+    has_replay: boolean | undefined
     user_id: number
     username: string | undefined
     accuracy: number
